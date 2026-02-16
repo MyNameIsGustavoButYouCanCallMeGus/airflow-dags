@@ -41,7 +41,7 @@ def test_clickhouse():
 
 
 with DAG(
-    dag_id="test_db_connections",
+    dag_id="test_db_connections_serzhan",
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
