@@ -7,7 +7,7 @@ import clickhouse_connect
 
 
 def test_mysql():
-    conn = BaseHook.get_connection("mysql_www")
+    conn = BaseHook.get_connection("mysql")
 
     connection = pymysql.connect(
         host=conn.host,
@@ -26,7 +26,7 @@ def test_mysql():
 
 
 def test_clickhouse():
-    conn = BaseHook.get_connection("clickhouse_local")
+    conn = BaseHook.get_connection("clickhouse")
 
     client = clickhouse_connect.get_client(
         host=conn.host,
