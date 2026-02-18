@@ -7,7 +7,7 @@ import clickhouse_connect
 
 
 def test_mysql():
-    conn = BaseHook.get_connection("mysql")
+    conn = BaseHook.get_connection("kamkor_db")
 
     connection = pymysql.connect(
         host=conn.host,
