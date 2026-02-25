@@ -15,7 +15,8 @@ def test_mysql():
         user=conn.login,
         password=conn.password,
         database=conn.schema,
-        connect_timeout=5
+        connect_timeout=5,
+        charset="utf8"
     )
 
     with connection.cursor() as cursor:
