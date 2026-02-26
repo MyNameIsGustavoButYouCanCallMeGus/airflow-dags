@@ -31,10 +31,10 @@ def test_clickhouse():
 
     client = clickhouse_connect.get_client(
         host=conn.host,
-        port=conn.port,
-        username=conn.login,
-        password=conn.password,
-        database=conn.schema
+        port=int(conn.port) if conn.port else 8123,
+        username=conn.login or "default",
+        password=conn.password or "",
+        database=conn.schema or "default"
     )
 
     result = client.query("SELECT 1")
