@@ -151,7 +151,6 @@ def load_dict31_flat():
         t.balance           as d31_balance,
         t.transactions      as d31_transactions,
         t.bin               as d31_bin,
-
         t2.rid              as d32_rid,
         t2.changed          as d32_changed,
         t2.user             as d32_user,
