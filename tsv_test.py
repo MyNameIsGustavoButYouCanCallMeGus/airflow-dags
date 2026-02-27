@@ -11,11 +11,10 @@ from collections import defaultdict, deque
 MYSQL_CONN_ID = "tourservice_mysql"
 CH_CONN_ID = "clickhouse"
 
-MYSQL_SCHEMA = None   # если None, возьмётся conn.schema (у тебя www)
-CH_DB = None          # если None, возьмётся conn.schema (у тебя fondkamkor)
+MYSQL_SCHEMA = None
+CH_DB = None
 
 BATCH_SIZE = 200_000
-
 ZERO_DATE_STRINGS = {"0000-00-00", "0000-00-00 00:00:00", "0000-00-00 00:00:00.000000"}
 
 
@@ -30,6 +29,8 @@ def _mysql_conn():
         password=conn.password,
         database=schema,
         connect_timeout=60,
+        read_timeout=600,
+        write_timeout=600,
         charset="utf8",
         cursorclass=pymysql.cursors.SSCursor,
         autocommit=True,
@@ -59,8 +60,8 @@ def _decode_if_bytes(x):
     return x
 
 
-def load_dict31_flat():
-    # ---------------- stats ----------------
+def _make_dt_converters():
+    # stats per task call
     zero_by_col = defaultdict(int)
     parse_fail_by_col = defaultdict(int)
     type_fail_by_col = defaultdict(int)
@@ -73,18 +74,12 @@ def load_dict31_flat():
             samples_by_col[col].append("<sample_error>")
 
     def _to_dt(x, col):
-        """
-        Returns datetime.datetime or None.
-        Never raises: bad values -> None + counters.
-        """
         if x is None:
             return None
-
         x = _decode_if_bytes(x)
 
         if isinstance(x, datetime):
             return x
-
         if isinstance(x, date):
             return datetime.combine(x, dtime.min)
 
@@ -92,20 +87,16 @@ def load_dict31_flat():
             s = x.strip()
             if not s:
                 return None
-
             if s in ZERO_DATE_STRINGS or s.startswith("0000-00-00"):
                 zero_by_col[col] += 1
                 _mark_sample(col, s)
                 return None
 
-            # common mysql datetime formats
             for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
                 try:
                     return datetime.strptime(s[:26], fmt)
                 except ValueError:
                     pass
-
-            # ISO-like
             for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
                 try:
                     return datetime.strptime(s[:26], fmt)
@@ -120,22 +111,186 @@ def load_dict31_flat():
         _mark_sample(col, x)
         return None
 
-    # ---------------- connections ----------------
+    def _print_stats(prefix=""):
+        def _fmt(d):
+            return "{ " + ", ".join(f"{k}: {v}" for k, v in sorted(d.items())) + " }"
+        print(prefix + f"Zero-date by column: {_fmt(zero_by_col)}")
+        print(prefix + f"Parse-fail by column: {_fmt(parse_fail_by_col)}")
+        print(prefix + f"Type-fail by column: {_fmt(type_fail_by_col)}")
+        if sum(zero_by_col.values()) or sum(parse_fail_by_col.values()) or sum(type_fail_by_col.values()):
+            for col in sorted(samples_by_col.keys()):
+                if samples_by_col[col]:
+                    print(prefix + f"Samples[{col}]: {list(samples_by_col[col])}")
+
+    return _to_dt, _print_stats
+
+
+def load_dict31():
+    to_dt, print_stats = _make_dt_converters()
+
     mysql_schema, mysql_connection = _mysql_conn()
     ch_db, ch = _ch_client()
 
-    target_table = "dict31_flat"
+    target_table = "dict31"
     ch_fq = f"`{ch_db}`.`{target_table}`"
 
-    print(f"=== LOAD FLAT {mysql_schema}.dict31 + {mysql_schema}.dict32 -> {ch_fq} | batch={BATCH_SIZE} ===")
+    print(f"=== LOAD {mysql_schema}.dict31 -> {ch_fq} | batch={BATCH_SIZE} ===")
 
-    t0 = time.time()
     ch.command(f"TRUNCATE TABLE {ch_fq}")
-    print(f"TRUNCATE OK in {time.time() - t0:.2f}s")
 
-    # ---------------- source SQL (MySQL) ----------------
     src_sql = f"""
     select
+        rid,
+        changed,
+        user,
+        enabled,
+        name,
+        type,
+        currency,
+        operatorid,
+        bik,
+        bank,
+        about,
+        filialid,
+        balance,
+        transactions,
+        bin
+    from `{mysql_schema}`.`dict31`
+    """
+
+    col_names = [
+        "rid", "changed", "user", "enabled", "name", "type", "currency",
+        "operatorid", "bik", "bank", "about", "filialid", "balance",
+        "transactions", "bin"
+    ]
+    idx_changed = col_names.index("changed")
+
+    total = 0
+    t_start = time.time()
+
+    try:
+        with mysql_connection.cursor() as cur:
+            print("Executing MySQL dict31 query...")
+            t_exec = time.time()
+            cur.execute(src_sql)
+            print(f"MySQL dict31 execute OK in {time.time()-t_exec:.2f}s. Fetching...")
+
+            while True:
+                t_fetch = time.time()
+                rows = cur.fetchmany(BATCH_SIZE)
+                if not rows:
+                    break
+                print(f"fetchmany(dict31) got {len(rows)} rows in {time.time()-t_fetch:.2f}s")
+
+                fixed = []
+                for r in rows:
+                    rr = list(r)
+                    rr[idx_changed] = to_dt(rr[idx_changed], col="dict31.changed")
+                    fixed.append(tuple(rr))
+
+                ch.insert(f"{ch_db}.{target_table}", fixed, column_names=col_names)
+
+                total += len(fixed)
+                elapsed = time.time() - t_start
+                print(f"Inserted dict31: {total} rows | {elapsed:.1f}s | ~{total/elapsed:.0f} r/s")
+
+    finally:
+        mysql_connection.close()
+
+    print_stats(prefix="[dict31] ")
+    print(f"=== DONE dict31 | rows={total} ===")
+
+
+def load_dict32():
+    to_dt, print_stats = _make_dt_converters()
+
+    mysql_schema, mysql_connection = _mysql_conn()
+    ch_db, ch = _ch_client()
+
+    target_table = "dict32"
+    ch_fq = f"`{ch_db}`.`{target_table}`"
+
+    print(f"=== LOAD {mysql_schema}.dict32 -> {ch_fq} | batch={BATCH_SIZE} ===")
+
+    ch.command(f"TRUNCATE TABLE {ch_fq}")
+
+    src_sql = f"""
+    select
+        rid,
+        changed,
+        user,
+        enabled,
+        bindrid,
+        money,
+        mode,
+        qid,
+        docid,
+        doctemplateid,
+        userid,
+        datetime,
+        first_datetime,
+        msg
+    from `{mysql_schema}`.`dict32`
+    """
+
+    col_names = [
+        "rid", "changed", "user", "enabled", "bindrid", "money", "mode",
+        "qid", "docid", "doctemplateid", "userid", "datetime",
+        "first_datetime", "msg"
+    ]
+    idx = {c: i for i, c in enumerate(col_names)}
+
+    total = 0
+    t_start = time.time()
+
+    try:
+        with mysql_connection.cursor() as cur:
+            print("Executing MySQL dict32 query...")
+            t_exec = time.time()
+            cur.execute(src_sql)
+            print(f"MySQL dict32 execute OK in {time.time()-t_exec:.2f}s. Fetching...")
+
+            while True:
+                t_fetch = time.time()
+                rows = cur.fetchmany(BATCH_SIZE)
+                if not rows:
+                    break
+                print(f"fetchmany(dict32) got {len(rows)} rows in {time.time()-t_fetch:.2f}s")
+
+                fixed = []
+                for r in rows:
+                    rr = list(r)
+                    rr[idx["changed"]] = to_dt(rr[idx["changed"]], col="dict32.changed")
+                    rr[idx["datetime"]] = to_dt(rr[idx["datetime"]], col="dict32.datetime")
+                    rr[idx["first_datetime"]] = to_dt(rr[idx["first_datetime"]], col="dict32.first_datetime")
+                    fixed.append(tuple(rr))
+
+                ch.insert(f"{ch_db}.{target_table}", fixed, column_names=col_names)
+
+                total += len(fixed)
+                elapsed = time.time() - t_start
+                print(f"Inserted dict32: {total} rows | {elapsed:.1f}s | ~{total/elapsed:.0f} r/s")
+
+    finally:
+        mysql_connection.close()
+
+    print_stats(prefix="[dict32] ")
+    print(f"=== DONE dict32 | rows={total} ===")
+
+
+def build_dict31_flat():
+    ch_db, ch = _ch_client()
+    target_flat = f"`{ch_db}`.`dict31_flat`"
+    t31 = f"`{ch_db}`.`dict31`"
+    t32 = f"`{ch_db}`.`dict32`"
+
+    print(f"=== BUILD FLAT {t31} + {t32} -> {target_flat} ===")
+
+    ch.command(f"TRUNCATE TABLE {target_flat}")
+
+    sql = f"""
+    INSERT INTO {target_flat}
+    SELECT
         t.rid               as d31_rid,
         t.changed           as d31_changed,
         t.user              as d31_user,
@@ -165,124 +320,38 @@ def load_dict31_flat():
         t2.datetime         as d32_datetime,
         t2.first_datetime   as d32_first_datetime,
         t2.msg              as d32_msg
-    from `{mysql_schema}`.`dict31` t
-    left join `{mysql_schema}`.`dict32` t2
-        on t.rid = t2.bindrid
+    FROM {t31} t
+    LEFT JOIN {t32} t2 ON t.rid = t2.bindrid
     """
 
-    # ---------------- target columns ----------------
-    col_names = [
-        "d31_rid",
-        "d31_changed",
-        "d31_user",
-        "d31_enabled",
-        "d31_name",
-        "d31_type",
-        "d31_currency",
-        "d31_operatorid",
-        "d31_bik",
-        "d31_bank",
-        "d31_about",
-        "d31_filialid",
-        "d31_balance",
-        "d31_transactions",
-        "d31_bin",
-        "d32_rid",
-        "d32_changed",
-        "d32_user",
-        "d32_enabled",
-        "d32_bindrid",
-        "d32_money",
-        "d32_mode",
-        "d32_qid",
-        "d32_docid",
-        "d32_doctemplateid",
-        "d32_userid",
-        "d32_datetime",
-        "d32_first_datetime",
-        "d32_msg",
-    ]
-    idx = {name: i for i, name in enumerate(col_names)}
-
-    # which columns are datetime
-    dt_cols = ["d31_changed", "d32_changed", "d32_datetime", "d32_first_datetime"]
-
-    total = 0
-    t_start = time.time()
-
-    try:
-        with mysql_connection.cursor() as cur:
-            cur.execute(src_sql)
-
-            while True:
-                rows = cur.fetchmany(BATCH_SIZE)
-                if not rows:
-                    break
-
-                fixed_rows = []
-                for r in rows:
-                    rr = list(r)
-
-                    for c in dt_cols:
-                        rr[idx[c]] = _to_dt(rr[idx[c]], col=c)
-
-                    fixed_rows.append(tuple(rr))
-
-                ch.insert(
-                    table=f"{ch_db}.{target_table}",
-                    data=fixed_rows,
-                    column_names=col_names,
-                )
-
-                total += len(fixed_rows)
-                elapsed = time.time() - t_start
-                rps = total / elapsed if elapsed > 0 else 0
-
-                z_total = sum(zero_by_col.values())
-                pf_total = sum(parse_fail_by_col.values())
-                tf_total = sum(type_fail_by_col.values())
-
-                print(
-                    f"Inserted {total} rows | elapsed={elapsed:.1f}s | ~{rps:.0f} rows/s | "
-                    f"zero={z_total} | parse_fail={pf_total} | type_fail={tf_total}"
-                )
-
-    finally:
-        mysql_connection.close()
-
-    elapsed = time.time() - t_start
-    rps = total / elapsed if elapsed > 0 else 0
-    ch_count = ch.query(f"select count() from {ch_fq}").result_rows[0][0]
-
-    def _fmt_dict(d):
-        return "{ " + ", ".join(f"{k}: {v}" for k, v in sorted(d.items())) + " }"
-
-    print(
-        f"=== DONE dict31_flat ===\n"
-        f"MySQL read rows: {total}\n"
-        f"ClickHouse count: {ch_count}\n"
-        f"Time: {elapsed:.2f}s\n"
-        f"Speed: ~{rps:.0f} rows/s\n"
-        f"Zero-date by column: {_fmt_dict(zero_by_col)}\n"
-        f"Parse-fail by column: {_fmt_dict(parse_fail_by_col)}\n"
-        f"Type-fail by column: {_fmt_dict(type_fail_by_col)}\n"
-    )
-
-    if sum(zero_by_col.values()) or sum(parse_fail_by_col.values()) or sum(type_fail_by_col.values()):
-        for col in sorted(samples_by_col.keys()):
-            if samples_by_col[col]:
-                print(f"Samples[{col}]: {list(samples_by_col[col])}")
+    t0 = time.time()
+    ch.command(sql)
+    elapsed = time.time() - t0
+    cnt = ch.query(f"SELECT count() FROM {target_flat}").result_rows[0][0]
+    print(f"BUILD OK | rows={cnt} | {elapsed:.2f}s")
 
 
 with DAG(
-    dag_id="sync_mysql_to_clickhouse_dict31_flat_serzhan",
+    dag_id="sync_mysql_to_clickhouse_dict31_dict32_then_flat_serzhan2",
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
-    tags=["sync", "mysql", "clickhouse", "flat", "dict31", "dict32"],
+    tags=["sync", "mysql", "clickhouse", "dict31", "dict32", "flat"],
 ) as dag:
 
-    load_flat = PythonOperator(
-        task_id="load_dict31_flat",
-        python_callable=load_dict31_flat,
+    t_load_dict31 = PythonOperator(
+        task_id="load_dict31",
+        python_callable=load_dict31,
     )
+
+    t_load_dict32 = PythonOperator(
+        task_id="load_dict32",
+        python_callable=load_dict32,
+    )
+
+    t_build_flat = PythonOperator(
+        task_id="build_dict31_flat",
+        python_callable=build_dict31_flat,
+    )
+
+    t_load_dict31 >> t_load_dict32 >> t_build_flat
