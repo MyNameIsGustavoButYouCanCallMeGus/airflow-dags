@@ -30,12 +30,11 @@ def test_clickhouse():
     conn = BaseHook.get_connection("clickhouse")
 
     client = clickhouse_connect.get_client(
-        host=conn.host,
+        host='89.35.125.165',
         port=8123,
-        username=conn.login,
-        password=conn.password,
-        database=conn.schema or "default",
-        interface="native"
+        username='default',
+        password='pass12345',
+        interface='http'
     )
 
     result = client.query("SELECT 1")
