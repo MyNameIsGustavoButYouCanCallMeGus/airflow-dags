@@ -31,7 +31,7 @@ def test_clickhouse():
 
     client = clickhouse_connect.get_client(
         host=conn.host,
-        port=int(conn.port)
+        port=8123
         username=conn.login,
         password=conn.password,
         database=conn.schema or "default",
