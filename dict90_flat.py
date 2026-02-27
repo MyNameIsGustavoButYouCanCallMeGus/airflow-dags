@@ -86,7 +86,7 @@ def load_dict90_flat():
     	    d.changed			as changed,
     	    d.user				as user,
     	    d.enabled			as enabled,
-    	    d2.rid        		as sub_rid,
+            coalesce(d2.rid, 0) as sub_rid,
     	    d2.bindrid    		as sub_bindrid,
     	    d2.sub_date_start	as sub_date_start,
     	    d2.sub_date_end		as sub_date_end,
