@@ -1,67 +1,28 @@
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
 from airflow.hooks.base import BaseHook
 from datetime import datetime
-import time
-import pymysql
-import clickhouse_connect
-
 
 MYSQL_CONN_ID = "tourservice_mysql"
 CH_CONN_ID = "clickhouse"
 
-MYSQL_SCHEMA = None
-CH_DB = None
+def _bash_cmd():
+    mysql = BaseHook.get_connection(MYSQL_CONN_ID)
+    ch = BaseHook.get_connection(CH_CONN_ID)
 
-# Step 1 speed-up:
-BATCH_SIZE = 200_000  # было 50_000
+    mysql_host = mysql.host
+    mysql_port = int(mysql.port or 3306)
+    mysql_user = mysql.login
+    mysql_pass = mysql.password
+    mysql_db   = mysql.schema  # www
 
+    ch_host = ch.host
+    ch_http_port = int(ch.port or 8123)  # у тебя 8123
+    ch_user = ch.login or "default"
+    ch_pass = ch.password or ""
+    ch_db   = ch.schema or "fondkamkor"
 
-def _mysql_conn():
-    conn = BaseHook.get_connection(MYSQL_CONN_ID)
-    schema = MYSQL_SCHEMA or conn.schema
-
-    connection = pymysql.connect(
-        host=conn.host,
-        port=int(conn.port),
-        user=conn.login,
-        password=conn.password,
-        database=schema,
-        connect_timeout=60,
-        charset="utf8",
-        cursorclass=pymysql.cursors.SSCursor
-    )
-    return schema, connection
-
-
-def _ch_client():
-    conn = BaseHook.get_connection(CH_CONN_ID)
-    db = CH_DB or (conn.schema or "default")
-
-    client = clickhouse_connect.get_client(
-        host=conn.host,
-        port=int(conn.port) if conn.port else 8123,
-        username=conn.login or "default",
-        password=conn.password or "",
-        interface="http",
-        database=db,
-        compress=True,  # Step 1 speed-up: HTTP compression
-    )
-    return db, client
-
-
-def load_dict90_flat():
-    mysql_schema, mysql_connection = _mysql_conn()
-    ch_db, ch = _ch_client()
-
-    target_table = "dict90_flat"
-    ch_fq = f"`{ch_db}`.`{target_table}`"
-    print(f"=== LOAD FLAT {mysql_schema}.dict90 + {mysql_schema}.dict91 -> {ch_fq} | batch={BATCH_SIZE} ===")
-
-    t0 = time.time()
-    ch.command(f"TRUNCATE TABLE {ch_fq}")
-    print(f"TRUNCATE OK in {time.time()-t0:.2f}s")
-
+    # Твой SQL (без изменений)
     src_sql = f"""
     select
     		d.rid				as rid,
@@ -99,117 +60,41 @@ def load_dict90_flat():
     	    d2.changed    		as sub_changed,
     	    d2.user       		as sub_user,
     	    d2.enabled    		as sub_enabled
-    from `{mysql_schema}`.`dict90` d
-    left join `{mysql_schema}`.`dict91` d2 on d.rid = d2.bindrid
+    from `{mysql_db}`.`dict90` d
+    left join `{mysql_db}`.`dict91` d2 on d.rid = d2.bindrid
     """
 
-    col_names = [
-        "rid",
-        "number",
-        "country1_id",
-        "country2_id",
-        "country3_id",
-        "country4_id",
-        "country5_id",
-        "country6_id",
-        "currency",
-        "date_start",
-        "date_end",
-        "touragent_bin",
-        "airport_start",
-        "airport_end",
-        "flight_start",
-        "flight_end",
-        "airlines",
-        "from_cabinet",
-        "passport",
-        "tid",
-        "qid",
-        "created",
-        "changed",
-        "user",
-        "enabled",
-        "sub_rid",
-        "sub_bindrid",
-        "sub_date_start",
-        "sub_date_end",
-        "sub_airport",
-        "sub_airlines",
-        "sub_flight",
-        "sub_changed",
-        "sub_user",
-        "sub_enabled",
-    ]
+    # ВАЖНО: --batch --raw --silent + табы в TSV
+    # ВАЖНО: на ClickHouse стороне указываем FORMAT TSV и input_format_null_as_default=1
+    # чтобы Nullable/UInt нормально вставлялись (0 уже в SQL для sub_rid)
+    cmd = f"""
+set -euo pipefail
 
-    # Safety: make sure sub_rid is never None (CH column is UInt32)
-    sub_rid_idx = col_names.index("sub_rid")
+clickhouse-client --host {ch_host} --port {ch_http_port} --protocol http \
+  --user '{ch_user}' --password '{ch_pass}' \
+  --database '{ch_db}' \
+  --query "TRUNCATE TABLE `{ch_db}`.`dict90_flat`"
 
-    total = 0
-    t_start = time.time()
-
-    try:
-        with mysql_connection.cursor() as cur:
-            cur.execute(src_sql)
-
-            batch = []
-            while True:
-                row = cur.fetchone()
-                if row is None:
-                    break
-
-                # enforce sub_rid not null even if MySQL driver returns None
-                if row[sub_rid_idx] is None:
-                    row = list(row)
-                    row[sub_rid_idx] = 0
-                    row = tuple(row)
-
-                batch.append(row)
-
-                if len(batch) >= BATCH_SIZE:
-                    ch.insert(
-                        table=f"{ch_db}.{target_table}",
-                        data=batch,
-                        column_names=col_names,
-                    )
-                    total += len(batch)
-                    elapsed = time.time() - t_start
-                    rps = total / elapsed if elapsed > 0 else 0
-                    print(f"Inserted {total} rows | elapsed={elapsed:.1f}s | ~{rps:.0f} rows/s")
-                    batch = []
-
-            if batch:
-                ch.insert(
-                    table=f"{ch_db}.{target_table}",
-                    data=batch,
-                    column_names=col_names,
-                )
-                total += len(batch)
-
-    finally:
-        mysql_connection.close()
-
-    elapsed = time.time() - t_start
-    rps = total / elapsed if elapsed > 0 else 0
-    ch_count = ch.query(f"select count() from {ch_fq}").result_rows[0][0]
-
-    print(
-        f"=== DONE dict90_flat ===\n"
-        f"MySQL read rows: {total}\n"
-        f"ClickHouse count: {ch_count}\n"
-        f"Time: {elapsed:.2f}s\n"
-        f"Speed: ~{rps:.0f} rows/s\n"
-    )
-
+mysql --host={mysql_host} --port={mysql_port} --user='{mysql_user}' --password='{mysql_pass}' \
+  --database='{mysql_db}' \
+  --batch --raw --silent \
+  -e "{src_sql.replace('"', '\\"').strip()}" \
+| clickhouse-client --host {ch_host} --port {ch_http_port} --protocol http \
+  --user '{ch_user}' --password '{ch_pass}' \
+  --database '{ch_db}' \
+  --query "INSERT INTO `{ch_db}`.`dict90_flat` SETTINGS input_format_null_as_default=1 FORMAT TSV"
+"""
+    return cmd
 
 with DAG(
-    dag_id="sync_mysql_to_clickhouse_dict90_flat_serzhan_fast1",
+    dag_id="sync_mysql_to_clickhouse_dict90_flat_pipe",
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
-    tags=["sync", "mysql", "clickhouse", "flat"]
+    tags=["sync", "mysql", "clickhouse", "flat", "pipe"]
 ) as dag:
 
-    load_flat = PythonOperator(
-        task_id="load_dict90_flat",
-        python_callable=load_dict90_flat
+    load_flat_pipe = BashOperator(
+        task_id="load_dict90_flat_pipe",
+        bash_command=_bash_cmd(),
     )
