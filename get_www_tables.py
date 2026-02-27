@@ -72,14 +72,12 @@ def _to_date(x):
         if s in ("0000-00-00", "0000-00-00 00:00:00"):
             return None
 
-        # стандартный DATE
         for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
             try:
                 return datetime.strptime(s, fmt).date()
             except ValueError:
                 pass
 
-        # если иногда приходит как datetime строка
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
             try:
                 return datetime.strptime(s, fmt).date()
