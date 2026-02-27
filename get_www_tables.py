@@ -90,26 +90,35 @@ def _to_date(x):
 def _to_dt(x):
     if x is None:
         return None
+
     if isinstance(x, datetime):
         return x
+
     if isinstance(x, (bytes, bytearray)):
         x = x.decode("utf-8", errors="ignore")
+
     if isinstance(x, str):
         s = x.strip()
         if not s:
             return None
+
+        # ✅ иногда timestamp может быть zero-date-like
+        if s in ("0000-00-00 00:00:00", "0000-00-00"):
+            return None
+
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
             try:
                 return datetime.strptime(s, fmt)
             except ValueError:
                 pass
-        # иногда timestamp может прийти как 'YYYY-MM-DDTHH:MM:SS'
+
         for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
             try:
                 return datetime.strptime(s, fmt)
             except ValueError:
                 pass
-    raise TypeError(f"Cannot convert to datetime: {type(x)} {x!r}")
+
+    raise TypeError(f"Cannot convert to datetime: type={type(x)} value={x!r}")
 
 
 def load_dict3_flat():
@@ -237,7 +246,6 @@ def load_dict3_flat():
         "d4_description",
     ]
 
-    # индексы колонок для приведения типов (date/datetime)
     idx_d3_changed = col_names.index("d3_changed")
     idx_d3_orgdate = col_names.index("d3_orgdate")
 
@@ -247,6 +255,7 @@ def load_dict3_flat():
     idx_d4_hajj = col_names.index("d4_hajj")
 
     total = 0
+    zero_dates = 0  # ✅ счётчик "0000-00-00"
     t_start = time.time()
 
     try:
@@ -258,10 +267,14 @@ def load_dict3_flat():
                 if not rows:
                     break
 
-                # приведение типов только для нужных полей
                 fixed_rows = []
                 for r in rows:
                     rr = list(r)
+
+                    # debug count for orgdate
+                    v = rr[idx_d3_orgdate]
+                    if isinstance(v, str) and v.strip() == "0000-00-00":
+                        zero_dates += 1
 
                     rr[idx_d3_changed] = _to_dt(rr[idx_d3_changed])
                     rr[idx_d3_orgdate] = _to_date(rr[idx_d3_orgdate])
@@ -289,7 +302,7 @@ def load_dict3_flat():
                 total += len(fixed_rows)
                 elapsed = time.time() - t_start
                 rps = total / elapsed if elapsed > 0 else 0
-                print(f"Inserted {total} rows | elapsed={elapsed:.1f}s | ~{rps:.0f} rows/s")
+                print(f"Inserted {total} rows | elapsed={elapsed:.1f}s | ~{rps:.0f} rows/s | zero-date={zero_dates}")
 
     finally:
         mysql_connection.close()
@@ -304,6 +317,7 @@ def load_dict3_flat():
         f"ClickHouse count: {ch_count}\n"
         f"Time: {elapsed:.2f}s\n"
         f"Speed: ~{rps:.0f} rows/s\n"
+        f"Zero dates: {zero_dates}\n"
     )
 
 
