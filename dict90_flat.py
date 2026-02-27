@@ -10,10 +10,9 @@ import clickhouse_connect
 MYSQL_CONN_ID = "tourservice_mysql"
 CH_CONN_ID = "clickhouse"
 
-MYSQL_SCHEMA = None   # если None -> берем conn.schema (у тебя это 'www')
-CH_DB = None          # если None -> берем conn.schema (у тебя это 'fondkamkor')
-
-BATCH_SIZE = 50_000   # для 5 млн лучше 50k (можешь вернуть 10k если хочешь)
+MYSQL_SCHEMA = None  
+CH_DB = None       
+BATCH_SIZE = 50_000
 
 
 def _mysql_conn():
@@ -28,7 +27,7 @@ def _mysql_conn():
         database=schema,
         connect_timeout=60,
         charset="utf8",
-        cursorclass=pymysql.cursors.SSCursor  # streaming
+        cursorclass=pymysql.cursors.SSCursor
     )
     return schema, connection
 
@@ -56,65 +55,68 @@ def load_dict90_flat():
     ch_fq = f"`{ch_db}`.`{target_table}`"
     print(f"=== LOAD FLAT {mysql_schema}.dict90 + {mysql_schema}.dict91 -> {ch_fq} | batch={BATCH_SIZE} ===")
 
-    # 1) TRUNCATE target
     t0 = time.time()
     ch.command(f"TRUNCATE TABLE {ch_fq}")
     print(f"TRUNCATE OK in {time.time()-t0:.2f}s")
 
-    # 2) Source JOIN query from MySQL (schema www)
     src_sql = f"""
-    SELECT
-        d.rid              AS rid,
-        d.number           AS number,
-        d.country1_id      AS country1_id,
-        d.country2_id      AS country2_id,
-        d.country3_id      AS country3_id,
-        d.country4_id      AS country4_id,
-        d.country5_id      AS country5_id,
-        d.country6_id      AS country6_id,
-        d.currency         AS currency,
-        d.date_start       AS date_start,
-        d.date_end         AS date_end,
-        d.touragent_bin    AS touragent_bin,
-        d.airport_start    AS airport_start,
-        d.airport_end      AS airport_end,
-        d.flight_start     AS flight_start,
-        d.flight_end       AS flight_end,
-        d.airlines         AS airlines,
-        d.from_cabinet     AS from_cabinet,
-        d.passport         AS passport,
-        d.tid              AS tid,
-        d.qid              AS qid,
-        d.created          AS created,
-        d.changed          AS changed,
-        d.user             AS user,
-        d.enabled          AS enabled,
-
-        COALESCE(d2.rid, 0)        AS sub_rid,       -- важно: sub_rid NOT NULL в CH
-        d2.bindrid                 AS sub_bindrid,
-        d2.sub_date_start          AS sub_date_start,
-        d2.sub_date_end            AS sub_date_end,
-        d2.sub_airport             AS sub_airport,
-        d2.sub_airlines            AS sub_airlines,
-        d2.sub_flight              AS sub_flight,
-        d2.changed                 AS sub_changed,
-        d2.user                    AS sub_user,
-        d2.enabled                 AS sub_enabled
-    FROM `{mysql_schema}`.`dict90` d
-    LEFT JOIN `{mysql_schema}`.`dict91` d2
-        ON d.rid = d2.bindrid
+    select
+    		d.rid				as rid,
+    	    d.number			as number,
+    	    d.country1_id		as country1_id, 
+    	    d.country2_id		as country2_id, 
+    	    d.country3_id		as country3_id, 
+    	    d.country4_id		as country4_id, 
+    	    d.country5_id		as country5_id, 
+    	    d.country6_id		as country6_id,
+    	    d.currency			as currency,
+    	    d.date_start		as date_start, 
+    	    d.date_end			as date_end,
+    	    d.touragent_bin		as touragent_bin,
+    	    d.airport_start		as airport_start, 
+    	    d.airport_end		as airport_end,
+    	    d.flight_start		as flight_start, 
+    	    d.flight_end		as flight_end,
+    	    d.airlines			as airlines,
+    	    d.from_cabinet		as from_cabinet,
+    	    d.passport			as passport,
+    	    d.tid				as tid,
+    	    d.qid				as qid,
+    	    d.created			as created,
+    	    d.changed			as changed,
+    	    d.user				as user,
+    	    d.enabled			as enabled,
+    	    d2.rid        		as sub_rid,
+    	    d2.bindrid    		as sub_bindrid,
+    	    d2.sub_date_start	as sub_date_start,
+    	    d2.sub_date_end		as sub_date_end,
+    	    d2.sub_airport		as sub_airport,
+    	    d2.sub_airlines		as sub_airlines,
+    	    d2.sub_flight		as sub_flight,
+    	    d2.changed    		as sub_changed,
+    	    d2.user       		as sub_user,
+    	    d2.enabled    		as sub_enabled
+    from `{mysql_schema}`.`dict90` d
+    left join `{mysql_schema}`.`dict91` d2 on d.rid = d2.bindrid
     """
 
-    # порядок колонок должен соответствовать SELECT и таблице CH
     col_names = [
         "rid",
         "number",
-        "country1_id", "country2_id", "country3_id", "country4_id", "country5_id", "country6_id",
+        "country1_id", 
+        "country2_id", 
+        "country3_id", 
+        "country4_id", 
+        "country5_id", 
+        "country6_id",
         "currency",
-        "date_start", "date_end",
+        "date_start", 
+        "date_end",
         "touragent_bin",
-        "airport_start", "airport_end",
-        "flight_start", "flight_end",
+        "airport_start", 
+        "airport_end",
+        "flight_start", 
+        "flight_end",
         "airlines",
         "from_cabinet",
         "passport",
@@ -176,7 +178,7 @@ def load_dict90_flat():
 
     elapsed = time.time() - t_start
     rps = total / elapsed if elapsed > 0 else 0
-    ch_count = ch.query(f"SELECT count() FROM {ch_fq}").result_rows[0][0]
+    ch_count = ch.query(f"select count() from {ch_fq}").result_rows[0][0]
 
     print(
         f"=== DONE dict90_flat ===\n"
