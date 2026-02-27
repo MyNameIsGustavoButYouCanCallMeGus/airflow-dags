@@ -58,7 +58,7 @@ def sync_table_full(table: str):
     ch_db, ch = _ch_client()
 
     mysql_fq = f"`{mysql_schema}`.`{table}`"
-    ch_fq = f"{_quote_ident(ch_db)}.{_quote_ident(table)}"
+    ch_fq = f"`{ch_db}`.`{table}`"
 
     print(f"=== FULL RELOAD {mysql_fq} -> {ch_fq} | batch={BATCH_SIZE} ===")
 
@@ -67,7 +67,6 @@ def sync_table_full(table: str):
     ch.command(f"TRUNCATE TABLE {ch_fq}")
     print(f"TRUNCATE OK in {time.time()-t0:.2f}s")
 
-    # 2) SELECT from MySQL (streaming)
     total = 0
     t_start = time.time()
 
@@ -75,11 +74,8 @@ def sync_table_full(table: str):
         with mysql_connection.cursor() as cur:
             cur.execute(f"SELECT * FROM {mysql_fq}")
 
-            # Получаем имена колонок из результата
             col_names = [d[0] for d in cur.description]
-            cols_sql = ", ".join(_quote_ident(c) for c in col_names)
-
-            insert_sql = f"INSERT INTO {ch_fq} ({cols_sql}) VALUES"
+            print(f"MySQL columns ({len(col_names)}): {col_names}")
 
             batch = []
             batch_rows = 0
@@ -93,7 +89,11 @@ def sync_table_full(table: str):
                 batch_rows += 1
 
                 if batch_rows >= BATCH_SIZE:
-                    ch.insert(insert_sql, batch)
+                    ch.insert(
+                        table=f"{ch_db}.{table}",
+                        data=batch,
+                        column_names=col_names,
+                    )
                     total += batch_rows
                     elapsed = time.time() - t_start
                     rps = total / elapsed if elapsed > 0 else 0
@@ -101,9 +101,12 @@ def sync_table_full(table: str):
                     batch = []
                     batch_rows = 0
 
-            # flush last batch
             if batch_rows > 0:
-                ch.insert(insert_sql, batch)
+                ch.insert(
+                    table=f"{ch_db}.{table}",
+                    data=batch,
+                    column_names=col_names,
+                )
                 total += batch_rows
 
     finally:
@@ -112,7 +115,6 @@ def sync_table_full(table: str):
     elapsed = time.time() - t_start
     rps = total / elapsed if elapsed > 0 else 0
 
-    # 3) verify count in CH
     ch_count = ch.query(f"SELECT count() FROM {ch_fq}").result_rows[0][0]
 
     print(
