@@ -10,9 +10,11 @@ import clickhouse_connect
 MYSQL_CONN_ID = "tourservice_mysql"
 CH_CONN_ID = "clickhouse"
 
-MYSQL_SCHEMA = None  
-CH_DB = None       
-BATCH_SIZE = 50_000
+MYSQL_SCHEMA = None
+CH_DB = None
+
+# Step 1 speed-up:
+BATCH_SIZE = 200_000  # было 50_000
 
 
 def _mysql_conn():
@@ -43,6 +45,7 @@ def _ch_client():
         password=conn.password or "",
         interface="http",
         database=db,
+        compress=True,  # Step 1 speed-up: HTTP compression
     )
     return db, client
 
@@ -103,19 +106,19 @@ def load_dict90_flat():
     col_names = [
         "rid",
         "number",
-        "country1_id", 
-        "country2_id", 
-        "country3_id", 
-        "country4_id", 
-        "country5_id", 
+        "country1_id",
+        "country2_id",
+        "country3_id",
+        "country4_id",
+        "country5_id",
         "country6_id",
         "currency",
-        "date_start", 
+        "date_start",
         "date_end",
         "touragent_bin",
-        "airport_start", 
+        "airport_start",
         "airport_end",
-        "flight_start", 
+        "flight_start",
         "flight_end",
         "airlines",
         "from_cabinet",
@@ -138,6 +141,9 @@ def load_dict90_flat():
         "sub_enabled",
     ]
 
+    # Safety: make sure sub_rid is never None (CH column is UInt32)
+    sub_rid_idx = col_names.index("sub_rid")
+
     total = 0
     t_start = time.time()
 
@@ -150,6 +156,12 @@ def load_dict90_flat():
                 row = cur.fetchone()
                 if row is None:
                     break
+
+                # enforce sub_rid not null even if MySQL driver returns None
+                if row[sub_rid_idx] is None:
+                    row = list(row)
+                    row[sub_rid_idx] = 0
+                    row = tuple(row)
 
                 batch.append(row)
 
@@ -190,7 +202,7 @@ def load_dict90_flat():
 
 
 with DAG(
-    dag_id="sync_mysql_to_clickhouse_dict90_flat_serzhan",
+    dag_id="sync_mysql_to_clickhouse_dict90_flat_serzhan_fast1",
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
