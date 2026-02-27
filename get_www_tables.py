@@ -53,19 +53,40 @@ def _ch_client():
 def _to_date(x):
     if x is None:
         return None
+
     if isinstance(x, date) and not isinstance(x, datetime):
         return x
+
     if isinstance(x, datetime):
         return x.date()
+
     if isinstance(x, (bytes, bytearray)):
         x = x.decode("utf-8", errors="ignore")
+
     if isinstance(x, str):
         s = x.strip()
         if not s:
             return None
-        # MySQL DATE обычно 'YYYY-MM-DD'
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    raise TypeError(f"Cannot convert to date: {type(x)} {x!r}")
+
+        # ✅ MySQL zero-date
+        if s in ("0000-00-00", "0000-00-00 00:00:00"):
+            return None
+
+        # стандартный DATE
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                pass
+
+        # если иногда приходит как datetime строка
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                pass
+
+    raise TypeError(f"Cannot convert to date: type={type(x)} value={x!r}")
 
 
 def _to_dt(x):
