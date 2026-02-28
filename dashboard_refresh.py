@@ -52,25 +52,34 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
 
     sql_12 = f"""
     INSERT INTO {d12}
-    SELECT
-        t3.created                  AS created,
-        t.d3_orgname                AS orgname,
-        t.d4_allow_auto_tour        AS allow_auto_tour,
-        t3.from_cabinet             AS from_cabinet,
-        t.d4_list                   AS list,
-        t3.passport                 AS passport,
-        t2.d32_qid                  AS qid
-    FROM {dict3_flat} t
-    JOIN {dict31_flat} t2
-        ON t.d4_rid = t2.d31_operatorid
-    LEFT JOIN {dict90_flat} t3
-        ON t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
-    LEFT JOIN {dict13} t4
-        ON t3.country1_id = t4.rid
-    WHERE
-          t2.d32_enabled = 1
-      AND t2.d32_mode = 0
-      AND t2.d32_qid > 0
+    select
+    	    t3.created    	    	    as created,
+    	    toYear(created)				as year,
+    		t.d3_orgname				as orgname,
+    		t.d4_allow_auto_tour		as allow_auto_tour,
+    		case when t.d4_allow_auto_tour = 1 then 'Да'
+    			 else 'Нет'
+    		end							as allow_auto_tour_russian,
+    		t3.from_cabinet 			as from_cabinet,
+    		t.d4_list 					as list,
+    		case when t.d4_list=0 then 'Туроператоры'
+    			 when t.d4_list=1 then 'Фрахтователи'
+    			 when t.d4_list=2 then 'Вышедшие туроператоры'
+    			 when t.d4_list=3 then 'Приостановившиеся деятельность'
+    			 when t.d4_list=4 then 'Скрытые'
+    			 else null
+    		end 						as list_russian,
+    		t3.passport 				as passport,
+    		t2.d32_qid 					as qid
+    from  {dict3_flat} t
+    join {dict31_flat} t2 	 on t.d4_rid=t2.d31_operatorid
+    left join {dict90_flat} t3 on t3.tid=t.d4_rid and t3.qid=t2.d32_qid       
+    left join {dict13} t4 	 on t3.country1_id=t4.rid
+    where 1=1
+      and t2.d32_enabled=1
+      and t2.d32_mode=0
+      and t2.d32_qid>0
+      and toYear(t3.created) != 1970
     """
 
     sql_19 = f"""
