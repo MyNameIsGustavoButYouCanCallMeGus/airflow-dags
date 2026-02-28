@@ -1,38 +1,28 @@
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from airflow.hooks.base import BaseHook
-from datetime import datetime, date, time as dtime
+# dag_dashboards_refresh.py
+from __future__ import annotations
+
 import time
-import pymysql
+from datetime import datetime
+from typing import Dict
+
 import clickhouse_connect
-from collections import defaultdict, deque
+
+from airflow import DAG
+from airflow.datasets import Dataset
+from airflow.hooks.base import BaseHook
+from airflow.operators.empty import EmptyOperator
+from airflow.operators.python import PythonOperator
+from airflow.utils.task_group import TaskGroup
 
 
-MYSQL_CONN_ID = "tourservice_mysql"
+# =========================
+# CONFIG
+# =========================
 CH_CONN_ID = "clickhouse"
+CH_DB = None  # None -> conn.schema (у тебя 'fondkamkor')
 
-MYSQL_SCHEMA = None
-CH_DB = None
-
-BATCH_SIZE = 200_000
-
-
-def _mysql_conn():
-    conn = BaseHook.get_connection(MYSQL_CONN_ID)
-    schema = MYSQL_SCHEMA or conn.schema
-
-    connection = pymysql.connect(
-        host=conn.host,
-        port=int(conn.port),
-        user=conn.login,
-        password=conn.password,
-        database=schema,
-        connect_timeout=60,
-        charset="utf8",
-        cursorclass=pymysql.cursors.SSCursor,
-        autocommit=True,
-    )
-    return schema, connection
+# Dataset, который публикует базовый DAG после успешного обновления dict* / flat*
+BASE_TABLES_READY = Dataset("ch://fondkamkor/base_tables_ready")
 
 
 def _ch_client():
@@ -51,345 +41,182 @@ def _ch_client():
     return db, client
 
 
-# -------------------------
-# Type normalization + stats
-# -------------------------
+# =========================
+# DASHBOARD QUERIES
+# =========================
+def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
+    """
+    Map: dashboard_table_name -> INSERT SELECT sql
+    IMPORTANT: SQL includes target table name.
+    """
+    d5 = f"`{ch_db}`.`dashboard_5`"
+    d12 = f"`{ch_db}`.`dashboard_12`"
+    d19 = f"`{ch_db}`.`dashboard_19`"
 
-ZERO_DATE_STRINGS = {"0000-00-00", "0000-00-00 00:00:00", "0000-00-00 00:00:00.000000"}
+    dict3_flat = f"`{ch_db}`.`dict3_flat`"
+    dict31_flat = f"`{ch_db}`.`dict31_flat`"
+    dict90_flat = f"`{ch_db}`.`dict90_flat`"
+    dict13 = f"`{ch_db}`.`dict13`"
 
-
-def _decode_if_bytes(x):
-    if isinstance(x, (bytes, bytearray)):
-        return x.decode("utf-8", errors="ignore")
-    return x
-
-
-def load_dict3_flat():
-    # stats
-    zero_by_col = defaultdict(int)
-    parse_fail_by_col = defaultdict(int)
-    type_fail_by_col = defaultdict(int)
-    samples_by_col = defaultdict(lambda: deque(maxlen=5))
-
-    def _mark_sample(col, value):
-        try:
-            samples_by_col[col].append(value if isinstance(value, str) else repr(value))
-        except Exception:
-            samples_by_col[col].append("<sample_error>")
-
-    def _to_date(x, col):
-        """
-        Returns datetime.date or None.
-        Never raises (so ETL doesn't die on one bad value).
-        Updates counters for diagnostics.
-        """
-        if x is None:
-            return None
-
-        x = _decode_if_bytes(x)
-
-        if isinstance(x, date) and not isinstance(x, datetime):
-            return x
-
-        if isinstance(x, datetime):
-            return x.date()
-
-        if isinstance(x, str):
-            s = x.strip()
-            if not s:
-                return None
-
-            if s in ZERO_DATE_STRINGS:
-                zero_by_col[col] += 1
-                _mark_sample(col, s)
-                return None
-
-            # try common formats
-            # if datetime-like, take first 10 chars
-            s10 = s[:10]
-            for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
-                try:
-                    return datetime.strptime(s10, fmt).date()
-                except ValueError:
-                    pass
-
-            # maybe it's full datetime string but we only need date
-            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
-                try:
-                    return datetime.strptime(s[:26], fmt).date()
-                except ValueError:
-                    pass
-
-            # parse fail
-            parse_fail_by_col[col] += 1
-            _mark_sample(col, s)
-            return None
-
-        # unexpected type
-        type_fail_by_col[col] += 1
-        _mark_sample(col, x)
-        return None
-
-    def _to_dt(x, col):
-        """
-        Returns datetime.datetime or None.
-        Never raises.
-        Updates counters for diagnostics.
-        """
-        if x is None:
-            return None
-
-        x = _decode_if_bytes(x)
-
-        if isinstance(x, datetime):
-            return x
-
-        if isinstance(x, date):
-            # convert date -> datetime at 00:00:00
-            return datetime.combine(x, dtime.min)
-
-        if isinstance(x, str):
-            s = x.strip()
-            if not s:
-                return None
-
-            # zero-date-like
-            if s in ZERO_DATE_STRINGS or s.startswith("0000-00-00"):
-                zero_by_col[col] += 1
-                _mark_sample(col, s)
-                return None
-
-            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
-                try:
-                    return datetime.strptime(s[:26], fmt)
-                except ValueError:
-                    pass
-
-            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
-                try:
-                    return datetime.strptime(s[:26], fmt)
-                except ValueError:
-                    pass
-
-            parse_fail_by_col[col] += 1
-            _mark_sample(col, s)
-            return None
-
-        type_fail_by_col[col] += 1
-        _mark_sample(col, x)
-        return None
-
-    mysql_schema, mysql_connection = _mysql_conn()
-    ch_db, ch = _ch_client()
-
-    target_table = "dict3_flat"
-    ch_fq = f"`{ch_db}`.`{target_table}`"
-
-    print(f"=== LOAD FLAT {mysql_schema}.dict3 + {mysql_schema}.dict4 -> {ch_fq} | batch={BATCH_SIZE} ===")
-
-    t0 = time.time()
-    ch.command(f"TRUNCATE TABLE {ch_fq}")
-    print(f"TRUNCATE OK in {time.time() - t0:.2f}s")
-
-    src_sql = f"""
-    select
-            t.rid               as d3_rid,
-            t.changed           as d3_changed,
-            t.user              as d3_user,
-            t.enabled           as d3_enabled,
-            t.orgname           as d3_orgname,
-            t.orgtype           as d3_orgtype,
-            t.orgdate           as d3_orgdate,
-            t.country           as d3_country,
-            t.town              as d3_town,
-            t.address           as d3_address,
-            t.address2          as d3_address2,
-            t.phone             as d3_phone,
-            t.email             as d3_email,
-            t.site              as d3_site,
-            t.bankinfo          as d3_bankinfo,
-            t.member            as d3_member,
-            t.iik               as d3_iik,
-            t.bik               as d3_bik,
-            t.bin               as d3_bin,
-            t.kbe               as d3_kbe,
-            t2.rid              as d4_rid,
-            t2.changed          as d4_changed,
-            t2.user             as d4_user,
-            t2.enabled          as d4_enabled,
-            t2.bindrid          as d4_bindrid,
-            t2.commission       as d4_commission,
-            t2.guarantee        as d4_guarantee,
-            t2.guarantee_num    as d4_guarantee_num,
-            t2.guarantee_date   as d4_guarantee_date,
-            t2.chieffname       as d4_chieffname,
-            t2.agreement        as d4_agreement,
-            t2.created          as d4_created,
-            t2.status           as d4_status,
-            t2.about            as d4_about,
-            t2.tourfirmname     as d4_tourfirmname,
-            t2.filials          as d4_filials,
-            t2.licence          as d4_licence,
-            t2.founders         as d4_founders,
-            t2.insurance        as d4_insurance,
-            t2.offices          as d4_offices,
-            t2.cellphone        as d4_cellphone,
-            t2.bad_past_tour    as d4_bad_past_tour,
-            t2.create_past_tour as d4_create_past_tour,
-            t2.no_create_tour   as d4_no_create_tour,
-            t2.allow_auto_tour  as d4_allow_auto_tour,
-            t2.list             as d4_list,
-            t2.is_agent         as d4_is_agent,
-            t2.remarks          as d4_remarks,
-            t2.auto_bad_tour    as d4_auto_bad_tour,
-            t2.hajj             as d4_hajj,
-            t2.description      as d4_description
-    from `{mysql_schema}`.`dict3` t
-    left join `{mysql_schema}`.`dict4` t2
-        on t.rid = t2.bindrid
+    sql_12 = f"""
+    INSERT INTO {d12}
+    SELECT
+        t3.created                  AS created,
+        t.d3_orgname                AS orgname,
+        t.d4_allow_auto_tour        AS allow_auto_tour,
+        t3.from_cabinet             AS from_cabinet,
+        t.d4_list                   AS list,
+        t3.passport                 AS passport,
+        t2.d32_qid                  AS qid
+    FROM {dict3_flat} t
+    JOIN {dict31_flat} t2
+        ON t.d4_rid = t2.d31_operatorid
+    LEFT JOIN {dict90_flat} t3
+        ON t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
+    LEFT JOIN {dict13} t4
+        ON t3.country1_id = t4.rid
+    WHERE
+          t2.d32_enabled = 1
+      AND t2.d32_mode = 0
+      AND t2.d32_qid > 0
     """
 
-    col_names = [
-        "d3_rid",
-        "d3_changed",
-        "d3_user",
-        "d3_enabled",
-        "d3_orgname",
-        "d3_orgtype",
-        "d3_orgdate",
-        "d3_country",
-        "d3_town",
-        "d3_address",
-        "d3_address2",
-        "d3_phone",
-        "d3_email",
-        "d3_site",
-        "d3_bankinfo",
-        "d3_member",
-        "d3_iik",
-        "d3_bik",
-        "d3_bin",
-        "d3_kbe",
-        "d4_rid",
-        "d4_changed",
-        "d4_user",
-        "d4_enabled",
-        "d4_bindrid",
-        "d4_commission",
-        "d4_guarantee",
-        "d4_guarantee_num",
-        "d4_guarantee_date",
-        "d4_chieffname",
-        "d4_agreement",
-        "d4_created",
-        "d4_status",
-        "d4_about",
-        "d4_tourfirmname",
-        "d4_filials",
-        "d4_licence",
-        "d4_founders",
-        "d4_insurance",
-        "d4_offices",
-        "d4_cellphone",
-        "d4_bad_past_tour",
-        "d4_create_past_tour",
-        "d4_no_create_tour",
-        "d4_allow_auto_tour",
-        "d4_list",
-        "d4_is_agent",
-        "d4_remarks",
-        "d4_auto_bad_tour",
-        "d4_hajj",
-        "d4_description",
-    ]
+    sql_19 = f"""
+    INSERT INTO {d19}
+    SELECT
+        t3.created                              AS created,
+        toYear(t3.created)                      AS year,
+        toMonth(t3.created)                     AS month,
+        CASE
+            WHEN toMonth(t3.created)=1  THEN 'Январь'
+            WHEN toMonth(t3.created)=2  THEN 'Февраль'
+            WHEN toMonth(t3.created)=3  THEN 'Март'
+            WHEN toMonth(t3.created)=4  THEN 'Апрель'
+            WHEN toMonth(t3.created)=5  THEN 'Май'
+            WHEN toMonth(t3.created)=6  THEN 'Июнь'
+            WHEN toMonth(t3.created)=7  THEN 'Июль'
+            WHEN toMonth(t3.created)=8  THEN 'Август'
+            WHEN toMonth(t3.created)=9  THEN 'Сентябрь'
+            WHEN toMonth(t3.created)=10 THEN 'Октябрь'
+            WHEN toMonth(t3.created)=11 THEN 'Ноябрь'
+            WHEN toMonth(t3.created)=12 THEN 'Декабрь'
+            ELSE NULL
+        END                                     AS month_russian,
+        t.d3_orgname                            AS orgname,
+        t2.d32_qid                              AS qid,
+        t4.country                              AS country
+    FROM {dict3_flat} t
+    JOIN {dict31_flat} t2
+        ON t.d4_rid = t2.d31_operatorid
+    LEFT JOIN {dict90_flat} t3
+        ON t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
+    LEFT JOIN {dict13} t4
+        ON t3.country1_id = t4.rid
+    WHERE
+          t2.d32_enabled = 1
+      AND t2.d32_mode = 0
+      AND t2.d32_qid > 0
+      AND toYear(t3.created) != 1970
+    """
 
-    # indexes
-    idx = {name: i for i, name in enumerate(col_names)}
+    sql_5 = f"""
+    INSERT INTO {d5}
+    SELECT
+        t3.created                              AS created,
+        t3.number                               AS tourcode,
+        concat(
+            'https://report.fondkamkor.kz/Voucher/queries/',
+            toString(t3.number),
+            '/view'
+        )                                       AS tourcode_url,
+        t.d3_orgname                            AS touragent,
+        t3.qid                                  AS qid,
+        t3.date_start                           AS date_start,
+        t3.date_end                             AS date_end,
+        t3.airlines                             AS airlines,
+        t3.airport_start                        AS airport_kz,
+        t3.airport_end                          AS airport_dest,
+        t4.country                              AS country,
+        t3.passport                             AS passport,
+        t.d4_description                        AS note,
+        t3.sub_date_start                       AS sub_date_start,
+        t3.sub_date_end                         AS sub_date_end,
+        t3.sub_airlines                         AS sub_airlines,
+        t3.sub_airport                          AS sub_airport
+    FROM {dict3_flat} t
+    JOIN {dict31_flat} t2
+        ON t.d4_rid = t2.d31_operatorid
+    LEFT JOIN {dict90_flat} t3
+        ON t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
+    LEFT JOIN {dict13} t4
+        ON t3.country1_id = t4.rid
+    WHERE
+          t2.d32_enabled = 1
+      AND t2.d32_mode = 0
+      AND t2.d32_qid > 0
+    """
 
-    total = 0
-    t_start = time.time()
+    return {
+        "dashboard_5": sql_5,
+        "dashboard_12": sql_12,
+        "dashboard_19": sql_19,
+    }
 
-    try:
-        with mysql_connection.cursor() as cur:
-            cur.execute(src_sql)
 
-            while True:
-                rows = cur.fetchmany(BATCH_SIZE)
-                if not rows:
-                    break
+def refresh_one_dashboard(table: str):
+    """
+    TRUNCATE + INSERT for a single dashboard table.
+    """
+    ch_db, ch = _ch_client()
 
-                fixed_rows = []
-                for r in rows:
-                    rr = list(r)
+    inserts = _dashboard_inserts(ch_db)
+    if table not in inserts:
+        raise ValueError(f"Unknown dashboard table: {table}. Known: {list(inserts.keys())}")
 
-                    rr[idx["d3_changed"]] = _to_dt(rr[idx["d3_changed"]], col="d3_changed")
-                    rr[idx["d3_orgdate"]] = _to_date(rr[idx["d3_orgdate"]], col="d3_orgdate")
+    fq = f"`{ch_db}`.`{table}`"
+    sql_insert = inserts[table]
 
-                    rr[idx["d4_changed"]] = _to_dt(rr[idx["d4_changed"]], col="d4_changed")
-                    rr[idx["d4_guarantee_date"]] = _to_date(rr[idx["d4_guarantee_date"]], col="d4_guarantee_date")
-                    rr[idx["d4_created"]] = _to_date(rr[idx["d4_created"]], col="d4_created")
-                    rr[idx["d4_hajj"]] = _to_date(rr[idx["d4_hajj"]], col="d4_hajj")
+    print(f"=== REFRESH {fq} (TRUNCATE + INSERT) ===")
 
-                    fixed_rows.append(tuple(rr))
+    t0 = time.time()
+    ch.command(f"TRUNCATE TABLE {fq}")
+    print(f"TRUNCATE OK in {time.time() - t0:.2f}s")
 
-                ch.insert(
-                    table=f"{ch_db}.{target_table}",
-                    data=fixed_rows,
-                    column_names=col_names,
-                )
+    t1 = time.time()
+    ch.command(sql_insert)
+    print(f"INSERT OK in {time.time() - t1:.2f}s")
 
-                total += len(fixed_rows)
-                elapsed = time.time() - t_start
-                rps = total / elapsed if elapsed > 0 else 0
+    cnt = ch.query(f"SELECT count() FROM {fq}").result_rows[0][0]
+    print(f"=== DONE {fq} | rows={cnt} | total={time.time() - t0:.2f}s ===")
 
-                # summary counters
-                z_total = sum(zero_by_col.values())
-                pf_total = sum(parse_fail_by_col.values())
-                tf_total = sum(type_fail_by_col.values())
 
-                print(
-                    f"Inserted {total} rows | elapsed={elapsed:.1f}s | ~{rps:.0f} rows/s | "
-                    f"zero={z_total} | parse_fail={pf_total} | type_fail={tf_total}"
-                )
-
-    finally:
-        mysql_connection.close()
-
-    elapsed = time.time() - t_start
-    rps = total / elapsed if elapsed > 0 else 0
-    ch_count = ch.query(f"select count() from {ch_fq}").result_rows[0][0]
-
-    # final diagnostics
-    def _fmt_dict(d):
-        return "{ " + ", ".join(f"{k}: {v}" for k, v in sorted(d.items())) + " }"
-
-    print(
-        f"=== DONE dict3_flat ===\n"
-        f"MySQL read rows: {total}\n"
-        f"ClickHouse count: {ch_count}\n"
-        f"Time: {elapsed:.2f}s\n"
-        f"Speed: ~{rps:.0f} rows/s\n"
-        f"Zero-date by column: {_fmt_dict(zero_by_col)}\n"
-        f"Parse-fail by column: {_fmt_dict(parse_fail_by_col)}\n"
-        f"Type-fail by column: {_fmt_dict(type_fail_by_col)}\n"
-    )
-
-    # print samples only if something suspicious happened
-    if sum(parse_fail_by_col.values()) > 0 or sum(type_fail_by_col.values()) > 0 or sum(zero_by_col.values()) > 0:
-        for col in sorted(samples_by_col.keys()):
-            if samples_by_col[col]:
-                print(f"Samples[{col}]: {list(samples_by_col[col])}")
-
+# =========================
+# DAG DEFINITION
+# =========================
+default_args = {
+    "owner": "serzhan",
+    "retries": 2,
+    "retry_delay": 60,  # seconds
+}
 
 with DAG(
-    dag_id="sync_mysql_to_clickhouse_dict3_flat_serzhan2",
+    dag_id="dashboards_refresh_serzhan",
     start_date=datetime(2024, 1, 1),
-    schedule=None,
+    schedule=[BASE_TABLES_READY],  # <-- запускается после базового DAG через Dataset
     catchup=False,
-    tags=["sync", "mysql", "clickhouse", "flat", "dict3"],
+    default_args=default_args,
+    tags=["clickhouse", "dashboards", "full_refresh"],
 ) as dag:
+    start = EmptyOperator(task_id="start")
+    end = EmptyOperator(task_id="end")
 
-    load_flat = PythonOperator(
-        task_id="load_dict3_flat",
-        python_callable=load_dict3_flat,
-    )
+    # Можно параллельно, но чтобы не убить CH, делаем цепочку (как ты любишь — контролировать нагрузку)
+    with TaskGroup(group_id="refresh_dashboards") as g:
+        d5 = PythonOperator(task_id="refresh_dashboard_5", python_callable=lambda: refresh_one_dashboard("dashboard_5"))
+        d12 = PythonOperator(task_id="refresh_dashboard_12", python_callable=lambda: refresh_one_dashboard("dashboard_12"))
+        d19 = PythonOperator(task_id="refresh_dashboard_19", python_callable=lambda: refresh_one_dashboard("dashboard_19"))
+
+        # порядок можно менять
+        d5 >> d12 >> d19
+
+    start >> g >> end
