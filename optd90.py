@@ -243,7 +243,7 @@ def load_dict31(batch_size: int = BATCH_SIZE_DEFAULT):
     print(f"=== DONE dict31 rows={total} ===")
 
 
-def load_dict32(batch_size: int = BATCH_SIZE_DEFAULT):
+def load_dict32(batch_size: int = 50_000):  # <-- уменьшили батч только тут
     mysql_schema, mysql_connection = _mysql_conn()
     ch_db, ch = _ch_client()
 
@@ -271,10 +271,17 @@ def load_dict32(batch_size: int = BATCH_SIZE_DEFAULT):
     try:
         with mysql_connection.cursor() as cur:
             cur.execute(src_sql)
+
             while True:
+                t_fetch = time.time()
                 rows = cur.fetchmany(batch_size)
+                fetch_s = time.time() - t_fetch
+
                 if not rows:
                     break
+
+                # Лог: понимаем, что MySQL реально отдаёт данные
+                print(f"dict32 fetched={len(rows)} rows in {fetch_s:.2f}s (total={total})")
 
                 fixed = []
                 for r in rows:
@@ -284,11 +291,19 @@ def load_dict32(batch_size: int = BATCH_SIZE_DEFAULT):
                     rr[idx_first] = _to_dt_min(rr[idx_first])
                     fixed.append(tuple(rr))
 
+                t_ins = time.time()
                 ch.insert(f"{ch_db}.dict32", fixed, column_names=col_names)
-                total += len(fixed)
+                ins_s = time.time() - t_ins
 
+                total += len(fixed)
                 elapsed = time.time() - t0
-                print(f"dict32 inserted={total} | {elapsed:.1f}s | ~{total/elapsed:.0f} r/s")
+                rps = total / elapsed if elapsed > 0 else 0
+
+                # Лог: понимаем, что CH принимает
+                print(
+                    f"dict32 inserted_total={total} | elapsed={elapsed:.1f}s | ~{rps:.0f} r/s | "
+                    f"fetch={fetch_s:.2f}s | insert={ins_s:.2f}s"
+                )
 
     finally:
         mysql_connection.close()
