@@ -817,7 +817,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="sync_mysql_to_clickhouse_all_tourservice_serzhan",
+    dag_id="mysql_to_clickhouse_serzhan",
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
