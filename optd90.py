@@ -59,6 +59,7 @@ def _mysql_conn():
 def _ch_client():
     conn = BaseHook.get_connection(CH_CONN_ID)
     db = CH_DB or (conn.schema or "default")
+    print(f"[CH] host={conn.host} port={conn.port} schema(db)='{db}' login={conn.login}")
 
     client = clickhouse_connect.get_client(
         host=conn.host,
@@ -69,6 +70,7 @@ def _ch_client():
         database=db,
         compress=True,
     )
+    
     return db, client
 
 
