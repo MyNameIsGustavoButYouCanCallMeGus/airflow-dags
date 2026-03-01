@@ -1097,7 +1097,7 @@ with DAG(
             python_callable=refresh_one_dashboard,
             op_kwargs={"table": "dashboard_9"},
         )
-        d7 = PythonOperator(
+        d11 = PythonOperator(
             task_id="refresh_dashboard_11",
             python_callable=refresh_one_dashboard,
             op_kwargs={"table": "dashboard_11"},
