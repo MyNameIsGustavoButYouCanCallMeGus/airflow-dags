@@ -950,7 +950,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="mysql_to_clickhouse_publish_serzhan",
+    dag_id="mysql_to_clickhouse_superset_serzhan",
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
