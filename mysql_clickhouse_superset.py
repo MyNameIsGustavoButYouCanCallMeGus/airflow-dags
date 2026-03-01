@@ -1050,7 +1050,7 @@ default_args = {
 with DAG(
     dag_id="mysql_to_clickhouse_superset_serzhan",
     start_date=datetime(2024, 1, 1),
-    schedule=None,
+    schedule="0 19 * * *",
     catchup=False,
     default_args=default_args,
     tags=["sync", "mysql", "clickhouse", "tourservice", "full_reload", "dashboards"],
