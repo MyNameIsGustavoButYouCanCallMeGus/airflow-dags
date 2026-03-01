@@ -18,11 +18,11 @@ from airflow.utils.task_group import TaskGroup
 MYSQL_CONN_ID = "tourservice_mysql"
 CH_CONN_ID = "clickhouse"
 
-MYSQL_SCHEMA = None   # None -> conn.schema (у тебя 'www')
-CH_DB = None          # None -> conn.schema (у тебя 'fondkamkor')
+MYSQL_SCHEMA = None
+CH_DB = None
 
 BATCH_SIZE_DEFAULT = 200_000
-BATCH_SIZE_SMALL = 10_000   # для "SELECT *" диктов (dict13/14/15/59)
+BATCH_SIZE_SMALL = 10_000
 
 
 def _mysql_conn():
@@ -39,7 +39,7 @@ def _mysql_conn():
         read_timeout=600,
         write_timeout=600,
         charset="utf8",
-        cursorclass=pymysql.cursors.SSCursor,  # server-side cursor
+        cursorclass=pymysql.cursors.SSCursor,
         autocommit=True,
     )
     return schema, connection
@@ -792,6 +792,9 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
     IMPORTANT: SQL includes target table name.
     """
     d5 = f"`{ch_db}`.`dashboard_5`"
+    d7 = f"`{ch_db}`.`dashboard_7`"
+    d9 = f"`{ch_db}`.`dashboard_9`"
+    d11 = f"`{ch_db}`.`dashboard_11`"
     d12 = f"`{ch_db}`.`dashboard_12`"
     d19 = f"`{ch_db}`.`dashboard_19`"
 
@@ -799,118 +802,213 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
     dict31_flat = f"`{ch_db}`.`dict31_flat`"
     dict90_flat = f"`{ch_db}`.`dict90_flat`"
     dict13 = f"`{ch_db}`.`dict13`"
+    dict14 = f"`{ch_db}`.`dict14`"
+    dict15 = f"`{ch_db}`.`dict15`"
+    dict59 = f"`{ch_db}`.`dict59`"
+    
 
-    sql_12 = f"""
-    INSERT INTO {d12}
-    SELECT
-        t3.created                           AS created,
-        toYear(created)                      AS year,
-        t.d3_orgname                         AS orgname,
-        t.d4_allow_auto_tour                 AS allow_auto_tour,
-        CASE WHEN t.d4_allow_auto_tour = 1 THEN 'Да' ELSE 'Нет' END AS allow_auto_tour_russian,
-        t3.from_cabinet                      AS from_cabinet,
-        t.d4_list                            AS list,
-        CASE
-            WHEN t.d4_list=0 THEN 'Туроператоры'
-            WHEN t.d4_list=1 THEN 'Фрахтователи'
-            WHEN t.d4_list=2 THEN 'Вышедшие туроператоры'
-            WHEN t.d4_list=3 THEN 'Приостановившиеся деятельность'
-            WHEN t.d4_list=4 THEN 'Скрытые'
-            ELSE NULL
-        END                                  AS list_russian,
-        t3.passport                          AS passport,
-        t2.d32_qid                           AS qid
-    FROM {dict3_flat} t
-    JOIN {dict31_flat} t2
-        ON t.d4_rid = t2.d31_operatorid
-    LEFT JOIN {dict90_flat} t3
-        ON t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
-    LEFT JOIN {dict13} t4
-        ON t3.country1_id = t4.rid
-    WHERE 1=1
-      AND t2.d32_enabled = 1
-      AND t2.d32_mode = 0
-      AND t2.d32_qid > 0
-      AND toYear(t3.created) != 1970
-    """
-
-    sql_19 = f"""
-    INSERT INTO {d19}
-    SELECT
-        t3.created                              AS created,
-        toYear(t3.created)                      AS year,
-        toMonth(t3.created)                     AS month,
-        CASE
-            WHEN toMonth(t3.created)=1  THEN 'Январь'
-            WHEN toMonth(t3.created)=2  THEN 'Февраль'
-            WHEN toMonth(t3.created)=3  THEN 'Март'
-            WHEN toMonth(t3.created)=4  THEN 'Апрель'
-            WHEN toMonth(t3.created)=5  THEN 'Май'
-            WHEN toMonth(t3.created)=6  THEN 'Июнь'
-            WHEN toMonth(t3.created)=7  THEN 'Июль'
-            WHEN toMonth(t3.created)=8  THEN 'Август'
-            WHEN toMonth(t3.created)=9  THEN 'Сентябрь'
-            WHEN toMonth(t3.created)=10 THEN 'Октябрь'
-            WHEN toMonth(t3.created)=11 THEN 'Ноябрь'
-            WHEN toMonth(t3.created)=12 THEN 'Декабрь'
-            ELSE NULL
-        END                                     AS month_russian,
-        t.d3_orgname                            AS orgname,
-        t2.d32_qid                              AS qid,
-        t4.country                              AS country
-    FROM {dict3_flat} t
-    JOIN {dict31_flat} t2
-        ON t.d4_rid = t2.d31_operatorid
-    LEFT JOIN {dict90_flat} t3
-        ON t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
-    LEFT JOIN {dict13} t4
-        ON t3.country1_id = t4.rid
-    WHERE
-          t2.d32_enabled = 1
-      AND t2.d32_mode = 0
-      AND t2.d32_qid > 0
-      AND toYear(t3.created) != 1970
-    """
 
     sql_5 = f"""
-    INSERT INTO {d5}
-    SELECT
-        t3.created                              AS created,
-        t3.number                               AS tourcode,
+    insert into {d5}
+    select
+        t3.created                              as created,
+        t3.number                               as tourcode,
         concat(
             'https://report.fondkamkor.kz/Voucher/queries/',
             toString(t3.number),
             '/view'
-        )                                       AS tourcode_url,
-        t.d3_orgname                            AS touragent,
-        t3.qid                                  AS qid,
-        t3.date_start                           AS date_start,
-        t3.date_end                             AS date_end,
-        t3.airlines                             AS airlines,
-        t3.airport_start                        AS airport_kz,
-        t3.airport_end                          AS airport_dest,
-        t4.country                              AS country,
-        t3.passport                             AS passport,
-        t.d4_description                        AS note,
-        t3.sub_date_start                       AS sub_date_start,
-        t3.sub_date_end                         AS sub_date_end,
-        t3.sub_airlines                         AS sub_airlines,
-        t3.sub_airport                          AS sub_airport
-    FROM {dict3_flat} t
-    JOIN {dict31_flat} t2
-        ON t.d4_rid = t2.d31_operatorid
-    LEFT JOIN {dict90_flat} t3
-        ON t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
-    LEFT JOIN {dict13} t4
-        ON t3.country1_id = t4.rid
-    WHERE
-          t2.d32_enabled = 1
-      AND t2.d32_mode = 0
-      AND t2.d32_qid > 0
+        )                                       as tourcode_url,
+        t.d3_orgname                            as touragent,
+        t3.qid                                  as qid,
+        t3.date_start                           as date_start,
+        t3.date_end                             as date_end,
+        t3.airlines                             as airlines,
+        t3.airport_start                        as airport_kz,
+        t3.airport_end                          as airport_dest,
+        t4.country                              as country,
+        t3.passport                             as passport,
+        t.d4_description                        as note,
+        t3.sub_date_start                       as sub_date_start,
+        t3.sub_date_end                         as sub_date_end,
+        t3.sub_airlines                         as sub_airlines,
+        t3.sub_airport                          as sub_airport
+    from {dict3_flat} t join {dict31_flat} t2 on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3                on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
+    left join {dict13} t4                     on t3.country1_id = t4.rid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
+    """
+
+    sql_7 = f"""
+    insert into {d7}
+    select
+	    t3.created    	    	    as created,
+	    toYear(t3.created)			as year,
+	    toMonth(t3.created)			as month,
+	    t2.d32_qid 					as qid,
+		t.d3_orgname				as orgname,
+		t3.airport_start			as airport,
+		t5.town						as city,
+		t7.country					as country 
+    from {dict3_flat} t 
+    join {dict31_flat} t2                     on t.d4_rid=t2.d31_operatorid
+    left join {dict90_flat} t3                on t3.tid=t.d4_rid and t3.qid=t2.d32_qid
+    left join {dict59} t4  	                  on t4.iata=t3.airport_start
+    left join {dict15} t5 		              on t5.rid=t4.bindrid 
+    left join {dict14} t6 		              on t6.rid=t5.bindrid 
+    left join {dict13} t4                     on t3.country1_id=t4.rid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
+    """  
+
+    sql_9 = f"""
+    insert into {d9}
+    select
+	    t3.created    	    	    as created,
+	    toYear(t3.created)			as year,
+	    toMonth(t3.created)			as month,
+	    case when toMonth(t3.created)=1 then 'Январь'
+	    	 when toMonth(t3.created)=2 then 'Февраль'
+	    	 when toMonth(t3.created)=3 then 'Март'
+	    	 when toMonth(t3.created)=4 then 'Апрель'
+	    	 when toMonth(t3.created)=5 then 'Май'
+	    	 when toMonth(t3.created)=6 then 'Июнь'
+	    	 when toMonth(t3.created)=7 then 'Июль'
+	    	 when toMonth(t3.created)=8 then 'Август'
+	    	 when toMonth(t3.created)=9 then 'Сентябрь'
+	    	 when toMonth(t3.created)=10 then 'Октябрь'
+	    	 when toMonth(t3.created)=11 then 'Ноябрь'
+	    	 when toMonth(t3.created)=12 then 'Декабрь'
+	    	 else null
+	    end 						as month_russian,
+	    t2.d32_qid 					as qid,
+		t3.airport_start			as airport,
+		t7.country					as country,
+		t5.town						as city
+    from {dict3_flat} t 
+    join {dict31_flat} t2 	 	on t.d4_rid=t2.d31_operatorid
+    left join {dict90_flat} t3  on t3.tid=t.d4_rid and t3.qid=t2.d32_qid       
+    left join {dict59} t4  	    on t4.iata=t3.airport_start
+    left join {dict15} t5 		on t5.rid=t4.bindrid 
+    left join {dict14} t6 		on t6.rid=t5.bindrid 
+    left join {dict13} t7 		on t7.rid=t6.bindrid 
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
+    """
+
+    sql_11 = f"""
+    insert into {d11}
+    select
+    	    t3.created    	    	    as created,
+    	    toYear(t3.created)			as year,
+    	    toMonth(t3.created)			as month,
+    	    case when toMonth(t3.created)=1 then 'Январь'
+    	    	 when toMonth(t3.created)=2 then 'Февраль'
+    	    	 when toMonth(t3.created)=3 then 'Март'
+    	    	 when toMonth(t3.created)=4 then 'Апрель'
+    	    	 when toMonth(t3.created)=5 then 'Май'
+    	    	 when toMonth(t3.created)=6 then 'Июнь'
+    	    	 when toMonth(t3.created)=7 then 'Июль'
+    	    	 when toMonth(t3.created)=8 then 'Август'
+    	    	 when toMonth(t3.created)=9 then 'Сентябрь'
+    	    	 when toMonth(t3.created)=10 then 'Октябрь'
+    	    	 when toMonth(t3.created)=11 then 'Ноябрь'
+    	    	 when toMonth(t3.created)=12 then 'Декабрь'
+    	    	 else null
+    	    end 						as month_russian,
+    		t.d3_orgname				as orgname,
+    		t2.d32_qid 					as qid
+    from {dict3_flat} t 
+    join {dict31_flat} t2                     on t.d4_rid=t2.d31_operatorid
+    left join {dict90_flat} t3                on t3.tid=t.d4_rid and t3.qid=t2.d32_qid
+    left join {dict13} t4                     on t3.country1_id=t4.rid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
+    """      
+    
+    sql_12 = f"""
+    insert into {d12}
+    select
+        t3.created                           as created,
+        toYear(created)                      as year,
+        t.d3_orgname                         as orgname,
+        t.d4_allow_auto_tour                 as allow_auto_tour,
+        case when t.d4_allow_auto_tour=1 then 'Да' 
+             else 'Нет' 
+        end                                  as allow_auto_tour_russian,
+        t3.from_cabinet                      as from_cabinet,
+        t.d4_list                            as list,
+        case when t.d4_list=0 then 'Туроператоры'
+             when t.d4_list=1 then 'Фрахтователи'
+             when t.d4_list=2 then 'Вышедшие туроператоры'
+             when t.d4_list=3 then 'Приостановившиеся деятельность'
+             when t.d4_list=4 then 'Скрытые'
+             else null
+        end                                  as list_russian,
+        t3.passport                          as passport,
+        t2.d32_qid                           as qid
+    from {dict3_flat} t
+    join {dict31_flat} t2      on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3 on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
+    left join {dict13} t4      on t3.country1_id = t4.rid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
+    """
+
+    sql_19 = f"""
+    insert into {d19}
+    select
+        t3.created                              as created,
+        toYear(t3.created)                      as year,
+        toMonth(t3.created)                     as month,
+        case when toMonth(t3.created)=1  then 'Январь'
+             when toMonth(t3.created)=2  then 'Февраль'
+             when toMonth(t3.created)=3  then 'Март'
+             when toMonth(t3.created)=4  then 'Апрель'
+             when toMonth(t3.created)=5  then 'Май'
+             when toMonth(t3.created)=6  then 'Июнь'
+             when toMonth(t3.created)=7  then 'Июль'
+             when toMonth(t3.created)=8  then 'Август'
+             when toMonth(t3.created)=9  then 'Сентябрь'
+             when toMonth(t3.created)=10 then 'Октябрь'
+             when toMonth(t3.created)=11 then 'Ноябрь'
+             when toMonth(t3.created)=12 then 'Декабрь'
+             else null
+        end                                     as month_russian,
+        t.d3_orgname                            as orgname,
+        t2.d32_qid                              as qid,
+        t4.country                              as country
+    from {dict3_flat} t
+    join {dict31_flat} t2      on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3 on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
+    left join {dict13} t4      on t3.country1_id = t4.rid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
     """
 
     return {
         "dashboard_5": sql_5,
+        "dashboard_7": sql_7,
+        "dashboard_9": sql_9,
+        "dashboard_11": sql_11,
         "dashboard_12": sql_12,
         "dashboard_19": sql_19,
     }
@@ -946,7 +1044,7 @@ def refresh_one_dashboard(table: str):
 default_args = {
     "owner": "serzhan",
     "retries": 2,
-    "retry_delay": 60,  # seconds
+    "retry_delay": 60,
 }
 
 with DAG(
@@ -989,6 +1087,21 @@ with DAG(
             python_callable=refresh_one_dashboard,
             op_kwargs={"table": "dashboard_5"},
         )
+        d7 = PythonOperator(
+            task_id="refresh_dashboard_7",
+            python_callable=refresh_one_dashboard,
+            op_kwargs={"table": "dashboard_7"},
+        )
+        d9 = PythonOperator(
+            task_id="refresh_dashboard_9",
+            python_callable=refresh_one_dashboard,
+            op_kwargs={"table": "dashboard_9"},
+        )
+        d7 = PythonOperator(
+            task_id="refresh_dashboard_11",
+            python_callable=refresh_one_dashboard,
+            op_kwargs={"table": "dashboard_11"},
+        )
         d12 = PythonOperator(
             task_id="refresh_dashboard_12",
             python_callable=refresh_one_dashboard,
@@ -1000,6 +1113,6 @@ with DAG(
             op_kwargs={"table": "dashboard_19"},
         )
 
-        d5 >> d12 >> d19
+        d5 >> d7 >> d9 >> d11 >> d12 >> d19
 
     start >> [g_basic, g_31_32, g_90_91, g_3flat] >> g_dash >> end
