@@ -858,8 +858,7 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
     left join {dict90_flat} t3                on t3.tid=t.d4_rid and t3.qid=t2.d32_qid
     left join {dict59} t4  	                  on t4.iata=t3.airport_start
     left join {dict15} t5 		              on t5.rid=t4.bindrid 
-    left join {dict14} t6 		              on t6.rid=t5.bindrid 
-    left join {dict13} t4                     on t3.country1_id=t4.rid
+    left join {dict14} t6 		              on t6.rid=t5.bindrid
     where 1=1
       and t2.d32_enabled = 1
       and t2.d32_mode = 0
