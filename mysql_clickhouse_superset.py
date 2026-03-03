@@ -888,6 +888,7 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
 	    	 else null
 	    end 						as month_russian,
 	    t2.d32_qid 					as qid,
+		t.d3_orgname				as orgname,
 		t3.airport_start			as airport,
 		t7.country					as country,
 		t5.town						as city
