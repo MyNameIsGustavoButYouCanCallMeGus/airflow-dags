@@ -818,7 +818,7 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
             toString(t3.number),
             '/view'
         )                                       as tourcode_url,
-        t.d3_orgname                            as touragent,
+        t.d3_orgname                            as orgname,
         t3.qid                                  as qid,
         t3.date_start                           as date_start,
         t3.date_end                             as date_end,
