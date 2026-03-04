@@ -1045,7 +1045,8 @@ def refresh_one_dashboard(table: str):
 default_args = {
     "owner": "serzhan",
     "retries": 2,
-    "retry_delay": 60,
+    "retry_delay": timedelta(minutes=1),
+    "execution_timeout": timedelta(minutes=50),
 }
 
 with DAG(
@@ -1054,6 +1055,8 @@ with DAG(
     schedule="0 * * * *",
     catchup=False,
     default_args=default_args,
+	max_active_runs=1,                            # добавили: не накладывать full reload
+    dagrun_timeout=timedelta(minutes=55),         # добавили: общий таймаут на DAG run
     tags=["sync", "mysql", "clickhouse", "tourservice", "full_reload", "dashboards"],
 ) as dag:
 
