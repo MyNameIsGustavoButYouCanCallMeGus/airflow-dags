@@ -180,12 +180,25 @@ def load_dict31(batch_size: int = BATCH_SIZE_DEFAULT):
     ch_db, ch = _ch_client()
 
     print(f"=== LOAD {mysql_schema}.dict31 -> `{ch_db}`.`dict31` ===")
-    ch.command(f"TRUNCATE TABLE `{ch_db}`.`dict31`")
+    ch.command(f"truncate table `{ch_db}`.`dict31`")
 
     src_sql = f"""
     select
-        rid, changed, user, enabled, name, type, currency, operatorid,
-        bik, bank, about, filialid, balance, transactions, bin
+	        rid, 
+			changed, 
+			user, 
+			enabled, 
+			name, 
+			type, 
+			currency, 
+			operatorid,
+	        bik, 
+			bank, 
+			about, 
+			filialid, 
+			balance, 
+			transactions, 
+			bin
     from `{mysql_schema}`.`dict31`
     """
 
@@ -229,12 +242,24 @@ def load_dict32(batch_size: int = BATCH_SIZE_DEFAULT):
     ch_db, ch = _ch_client()
 
     print(f"=== LOAD {mysql_schema}.dict32 -> `{ch_db}`.`dict32` ===")
-    ch.command(f"TRUNCATE TABLE `{ch_db}`.`dict32`")
+    ch.command(f"truncate table `{ch_db}`.`dict32`")
 
     src_sql = f"""
     select
-        rid, changed, user, enabled, bindrid, money, mode, qid, docid,
-        doctemplateid, userid, datetime, first_datetime, msg
+        rid, 
+		changed, 
+		user, 
+		enabled, 
+		bindrid, 
+		money,
+		mode, 
+		qid, 
+		docid,
+        doctemplateid, 
+		userid, 
+		datetime, 
+		first_datetime, 
+		msg
     from `{mysql_schema}`.`dict32`
     """
 
@@ -281,43 +306,42 @@ def build_dict31_flat():
     ch_db, ch = _ch_client()
     print(f"=== BUILD `{ch_db}`.`dict31_flat` from `{ch_db}`.`dict31` + `{ch_db}`.`dict32` ===")
 
-    ch.command(f"TRUNCATE TABLE `{ch_db}`.`dict31_flat`")
+    ch.command(f"truncate table `{ch_db}`.`dict31_flat`")
 
     sql = f"""
-    INSERT INTO `{ch_db}`.`dict31_flat`
-    SELECT
-        t.rid               as d31_rid,
-        t.changed           as d31_changed,
-        t.user              as d31_user,
-        t.enabled           as d31_enabled,
-        t.name              as d31_name,
-        t.type              as d31_type,
-        t.currency          as d31_currency,
-        t.operatorid        as d31_operatorid,
-        t.bik               as d31_bik,
-        t.bank              as d31_bank,
-        t.about             as d31_about,
-        t.filialid          as d31_filialid,
-        t.balance           as d31_balance,
-        t.transactions      as d31_transactions,
-        t.bin               as d31_bin,
-        t2.rid              as d32_rid,
-        t2.changed          as d32_changed,
-        t2.user             as d32_user,
-        t2.enabled          as d32_enabled,
-        t2.bindrid          as d32_bindrid,
-        t2.money            as d32_money,
-        t2.mode             as d32_mode,
-        t2.qid              as d32_qid,
-        t2.docid            as d32_docid,
-        t2.doctemplateid    as d32_doctemplateid,
-        t2.userid           as d32_userid,
-        t2.datetime         as d32_datetime,
-        t2.first_datetime   as d32_first_datetime,
-        t2.msg              as d32_msg
-    FROM `{ch_db}`.`dict31` t
-    LEFT JOIN `{ch_db}`.`dict32` t2
-        ON t.rid = t2.bindrid
+    insert into `{ch_db}`.`dict31_flat`
+    select
+	        t.rid               as d31_rid,
+	        t.changed           as d31_changed,
+	        t.user              as d31_user,
+	        t.enabled           as d31_enabled,
+	        t.name              as d31_name,
+	        t.type              as d31_type,
+	        t.currency          as d31_currency,
+	        t.operatorid        as d31_operatorid,
+	        t.bik               as d31_bik,
+	        t.bank              as d31_bank,
+	        t.about             as d31_about,
+	        t.filialid          as d31_filialid,
+	        t.balance           as d31_balance,
+	        t.transactions      as d31_transactions,
+	        t.bin               as d31_bin,
+	        t2.rid              as d32_rid,
+	        t2.changed          as d32_changed,
+	        t2.user             as d32_user,
+	        t2.enabled          as d32_enabled,
+	        t2.bindrid          as d32_bindrid,
+	        t2.money            as d32_money,
+	        t2.mode             as d32_mode,
+	        t2.qid              as d32_qid,
+	        t2.docid            as d32_docid,
+	        t2.doctemplateid    as d32_doctemplateid,
+	        t2.userid           as d32_userid,
+	        t2.datetime         as d32_datetime,
+	        t2.first_datetime   as d32_first_datetime,
+	        t2.msg              as d32_msg
+    from `{ch_db}`.`dict31` t
+    left join `{ch_db}`.`dict32` t2 on t.rid = t2.bindrid
     """
 
     t0 = time.time()
@@ -433,60 +457,59 @@ def load_dict3_flat(batch_size: int = BATCH_SIZE_DEFAULT):
 
     src_sql = f"""
     select
-        t.rid               as d3_rid,
-        t.changed           as d3_changed,
-        t.user              as d3_user,
-        t.enabled           as d3_enabled,
-        t.orgname           as d3_orgname,
-        t.orgtype           as d3_orgtype,
-        t.orgdate           as d3_orgdate,
-        t.country           as d3_country,
-        t.town              as d3_town,
-        t.address           as d3_address,
-        t.address2          as d3_address2,
-        t.phone             as d3_phone,
-        t.email             as d3_email,
-        t.site              as d3_site,
-        t.bankinfo          as d3_bankinfo,
-        t.member            as d3_member,
-        t.iik               as d3_iik,
-        t.bik               as d3_bik,
-        t.bin               as d3_bin,
-        t.kbe               as d3_kbe,
-        t2.rid              as d4_rid,
-        t2.changed          as d4_changed,
-        t2.user             as d4_user,
-        t2.enabled          as d4_enabled,
-        t2.bindrid          as d4_bindrid,
-        t2.commission       as d4_commission,
-        t2.guarantee        as d4_guarantee,
-        t2.guarantee_num    as d4_guarantee_num,
-        t2.guarantee_date   as d4_guarantee_date,
-        t2.chieffname       as d4_chieffname,
-        t2.agreement        as d4_agreement,
-        t2.created          as d4_created,
-        t2.status           as d4_status,
-        t2.about            as d4_about,
-        t2.tourfirmname     as d4_tourfirmname,
-        t2.filials          as d4_filials,
-        t2.licence          as d4_licence,
-        t2.founders         as d4_founders,
-        t2.insurance        as d4_insurance,
-        t2.offices          as d4_offices,
-        t2.cellphone        as d4_cellphone,
-        t2.bad_past_tour    as d4_bad_past_tour,
-        t2.create_past_tour as d4_create_past_tour,
-        t2.no_create_tour   as d4_no_create_tour,
-        t2.allow_auto_tour  as d4_allow_auto_tour,
-        t2.list             as d4_list,
-        t2.is_agent         as d4_is_agent,
-        t2.remarks          as d4_remarks,
-        t2.auto_bad_tour    as d4_auto_bad_tour,
-        t2.hajj             as d4_hajj,
-        t2.description      as d4_description
+	        t.rid               as d3_rid,
+	        t.changed           as d3_changed,
+	        t.user              as d3_user,
+	        t.enabled           as d3_enabled,
+	        t.orgname           as d3_orgname,
+	        t.orgtype           as d3_orgtype,
+	        t.orgdate           as d3_orgdate,
+	        t.country           as d3_country,
+	        t.town              as d3_town,
+	        t.address           as d3_address,
+	        t.address2          as d3_address2,
+	        t.phone             as d3_phone,
+	        t.email             as d3_email,
+	        t.site              as d3_site,
+	        t.bankinfo          as d3_bankinfo,
+	        t.member            as d3_member,
+	        t.iik               as d3_iik,
+	        t.bik               as d3_bik,
+	        t.bin               as d3_bin,
+	        t.kbe               as d3_kbe,
+	        t2.rid              as d4_rid,
+	        t2.changed          as d4_changed,
+	        t2.user             as d4_user,
+	        t2.enabled          as d4_enabled,
+	        t2.bindrid          as d4_bindrid,
+	        t2.commission       as d4_commission,
+	        t2.guarantee        as d4_guarantee,
+	        t2.guarantee_num    as d4_guarantee_num,
+	        t2.guarantee_date   as d4_guarantee_date,
+	        t2.chieffname       as d4_chieffname,
+	        t2.agreement        as d4_agreement,
+	        t2.created          as d4_created,
+	        t2.status           as d4_status,
+	        t2.about            as d4_about,
+	        t2.tourfirmname     as d4_tourfirmname,
+	        t2.filials          as d4_filials,
+	        t2.licence          as d4_licence,
+	        t2.founders         as d4_founders,
+	        t2.insurance        as d4_insurance,
+	        t2.offices          as d4_offices,
+	        t2.cellphone        as d4_cellphone,
+	        t2.bad_past_tour    as d4_bad_past_tour,
+	        t2.create_past_tour as d4_create_past_tour,
+	        t2.no_create_tour   as d4_no_create_tour,
+	        t2.allow_auto_tour  as d4_allow_auto_tour,
+	        t2.list             as d4_list,
+	        t2.is_agent         as d4_is_agent,
+	        t2.remarks          as d4_remarks,
+	        t2.auto_bad_tour    as d4_auto_bad_tour,
+	        t2.hajj             as d4_hajj,
+	        t2.description      as d4_description
     from `{mysql_schema}`.`dict3` t
-    left join `{mysql_schema}`.`dict4` t2
-        on t.rid = t2.bindrid
+    left join `{mysql_schema}`.`dict4` t2 on t.rid = t2.bindrid
     """
 
     col_names = [
@@ -582,31 +605,31 @@ def load_dict90(batch_size: int = BATCH_SIZE_DEFAULT):
 
     src_sql = f"""
     select
-        d.rid             as rid,
-        d.number          as number,
-        d.country1_id     as country1_id,
-        d.country2_id     as country2_id,
-        d.country3_id     as country3_id,
-        d.country4_id     as country4_id,
-        d.country5_id     as country5_id,
-        d.country6_id     as country6_id,
-        d.currency        as currency,
-        d.date_start      as date_start,
-        d.date_end        as date_end,
-        d.touragent_bin   as touragent_bin,
-        d.airport_start   as airport_start,
-        d.airport_end     as airport_end,
-        d.flight_start    as flight_start,
-        d.flight_end      as flight_end,
-        d.airlines        as airlines,
-        d.from_cabinet    as from_cabinet,
-        d.passport        as passport,
-        d.tid             as tid,
-        d.qid             as qid,
-        d.created         as created,
-        d.changed         as changed,
-        d.user            as user,
-        d.enabled         as enabled
+	        d.rid             as rid,
+	        d.number          as number,
+	        d.country1_id     as country1_id,
+	        d.country2_id     as country2_id,
+	        d.country3_id     as country3_id,
+	        d.country4_id     as country4_id,
+	        d.country5_id     as country5_id,
+	        d.country6_id     as country6_id,
+	        d.currency        as currency,
+	        d.date_start      as date_start,
+	        d.date_end        as date_end,
+	        d.touragent_bin   as touragent_bin,
+	        d.airport_start   as airport_start,
+	        d.airport_end     as airport_end,
+	        d.flight_start    as flight_start,
+	        d.flight_end      as flight_end,
+	        d.airlines        as airlines,
+	        d.from_cabinet    as from_cabinet,
+	        d.passport        as passport,
+	        d.tid             as tid,
+	        d.qid             as qid,
+	        d.created         as created,
+	        d.changed         as changed,
+	        d.user            as user,
+	        d.enabled         as enabled
     from `{mysql_schema}`.`dict90` d
     """
 
@@ -668,16 +691,16 @@ def load_dict91(batch_size: int = BATCH_SIZE_DEFAULT):
 
     src_sql = f"""
     select
-        d2.rid            as rid,
-        d2.bindrid        as bindrid,
-        d2.sub_date_start as sub_date_start,
-        d2.sub_date_end   as sub_date_end,
-        d2.sub_airport    as sub_airport,
-        d2.sub_airlines   as sub_airlines,
-        d2.sub_flight     as sub_flight,
-        d2.changed        as changed,
-        d2.user           as user,
-        d2.enabled        as enabled
+	        d2.rid            as rid,
+	        d2.bindrid        as bindrid,
+	        d2.sub_date_start as sub_date_start,
+	        d2.sub_date_end   as sub_date_end,
+	        d2.sub_airport    as sub_airport,
+	        d2.sub_airlines   as sub_airlines,
+	        d2.sub_flight     as sub_flight,
+	        d2.changed        as changed,
+	        d2.user           as user,
+	        d2.enabled        as enabled
     from `{mysql_schema}`.`dict91` d2
     """
 
@@ -740,46 +763,45 @@ def build_dict90_flat():
     t_start = time.time()
 
     ch.command(f"""
-    INSERT INTO {flat}
-    SELECT
-        d.rid             as rid,
-        d.number          as number,
-        d.country1_id     as country1_id,
-        d.country2_id     as country2_id,
-        d.country3_id     as country3_id,
-        d.country4_id     as country4_id,
-        d.country5_id     as country5_id,
-        d.country6_id     as country6_id,
-        d.currency        as currency,
-        d.date_start      as date_start,
-        d.date_end        as date_end,
-        d.touragent_bin   as touragent_bin,
-        d.airport_start   as airport_start,
-        d.airport_end     as airport_end,
-        d.flight_start    as flight_start,
-        d.flight_end      as flight_end,
-        d.airlines        as airlines,
-        d.from_cabinet    as from_cabinet,
-        d.passport        as passport,
-        d.tid             as tid,
-        d.qid             as qid,
-        d.created         as created,
-        d.changed         as changed,
-        d.user            as user,
-        d.enabled         as enabled,
-        ifNull(d2.rid, 0) as sub_rid,
-        d2.bindrid        as sub_bindrid,
-        d2.sub_date_start as sub_date_start,
-        d2.sub_date_end   as sub_date_end,
-        d2.sub_airport    as sub_airport,
-        d2.sub_airlines   as sub_airlines,
-        d2.sub_flight     as sub_flight,
-        d2.changed        as sub_changed,
-        d2.user           as sub_user,
-        d2.enabled        as sub_enabled
-    FROM {d90} d
-    LEFT JOIN {d91} d2
-        ON d.rid = d2.bindrid
+    insert into {flat}
+    select
+	        d.rid             as rid,
+	        d.number          as number,
+	        d.country1_id     as country1_id,
+	        d.country2_id     as country2_id,
+	        d.country3_id     as country3_id,
+	        d.country4_id     as country4_id,
+	        d.country5_id     as country5_id,
+	        d.country6_id     as country6_id,
+	        d.currency        as currency,
+	        d.date_start      as date_start,
+	        d.date_end        as date_end,
+	        d.touragent_bin   as touragent_bin,
+	        d.airport_start   as airport_start,
+	        d.airport_end     as airport_end,
+	        d.flight_start    as flight_start,
+	        d.flight_end      as flight_end,
+	        d.airlines        as airlines,
+	        d.from_cabinet    as from_cabinet,
+	        d.passport        as passport,
+	        d.tid             as tid,
+	        d.qid             as qid,
+	        d.created         as created,
+	        d.changed         as changed,
+	        d.user            as user,
+	        d.enabled         as enabled,
+	        ifNull(d2.rid, 0) as sub_rid,
+	        d2.bindrid        as sub_bindrid,
+	        d2.sub_date_start as sub_date_start,
+	        d2.sub_date_end   as sub_date_end,
+	        d2.sub_airport    as sub_airport,
+	        d2.sub_airlines   as sub_airlines,
+	        d2.sub_flight     as sub_flight,
+	        d2.changed        as sub_changed,
+	        d2.user           as sub_user,
+	        d2.enabled        as sub_enabled
+    from {d90} d
+    left join {d91} d2 on d.rid = d2.bindrid
     """)
 
     elapsed = time.time() - t_start
@@ -792,12 +814,12 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
     Map: dashboard_table_name -> INSERT SELECT sql
     IMPORTANT: SQL includes target table name.
     """
-    d5 = f"`{ch_db}`.`dashboard_5`"
-    d7 = f"`{ch_db}`.`dashboard_7`"
-    d9 = f"`{ch_db}`.`dashboard_9`"
-    d11 = f"`{ch_db}`.`dashboard_11`"
-    d12 = f"`{ch_db}`.`dashboard_12`"
-    d19 = f"`{ch_db}`.`dashboard_19`"
+    d5 = f"`{ch_db}`.`t_so_dashboard_5`"
+    d7 = f"`{ch_db}`.`t_so_dashboard_7`"
+    d9 = f"`{ch_db}`.`t_so_dashboard_9`"
+    d11 = f"`{ch_db}`.`t_so_dashboard_11`"
+    d12 = f"`{ch_db}`.`t_so_dashboard_12`"
+    d19 = f"`{ch_db}`.`t_so_dashboard_19`"
 
     dict3_flat = f"`{ch_db}`.`dict3_flat`"
     dict31_flat = f"`{ch_db}`.`dict31_flat`"
@@ -812,27 +834,27 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
     sql_5 = f"""
     insert into {d5}
     select
-        t3.created                              as created,
-        t3.number                               as tourcode,
-        concat(
-            'https://report.fondkamkor.kz/Voucher/queries/',
-            toString(t3.number),
-            '/view'
-        )                                       as tourcode_url,
-        t.d3_orgname                            as orgname,
-        t3.qid                                  as qid,
-        t3.date_start                           as date_start,
-        t3.date_end                             as date_end,
-        t3.airlines                             as airlines,
-        t3.airport_start                        as airport_kz,
-        t3.airport_end                          as airport_dest,
-        t4.country                              as country,
-        t3.passport                             as passport,
-        t.d4_description                        as note,
-        t3.sub_date_start                       as sub_date_start,
-        t3.sub_date_end                         as sub_date_end,
-        t3.sub_airlines                         as sub_airlines,
-        t3.sub_airport                          as sub_airport
+	        t3.created                              as created,
+	        t3.number                               as tourcode,
+	        concat(
+	            'https://report.fondkamkor.kz/Voucher/queries/',
+	            toString(t3.number),
+	            '/view'
+	        )                                       as tourcode_url,
+	        t.d3_orgname                            as orgname,
+	        t3.qid                                  as qid,
+	        t3.date_start                           as date_start,
+	        t3.date_end                             as date_end,
+	        t3.airlines                             as airlines,
+	        t3.airport_start                        as airport_kz,
+	        t3.airport_end                          as airport_dest,
+	        t4.country                              as country,
+	        t3.passport                             as passport,
+	        t.d4_description                        as note,
+	        t3.sub_date_start                       as sub_date_start,
+	        t3.sub_date_end                         as sub_date_end,
+	        t3.sub_airlines                         as sub_airlines,
+	        t3.sub_airport                          as sub_airport
     from {dict3_flat} t join {dict31_flat} t2 on t.d4_rid = t2.d31_operatorid
     left join {dict90_flat} t3                on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
     left join {dict13} t4                     on t3.country1_id = t4.rid
@@ -846,14 +868,14 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
     sql_7 = f"""
     insert into {d7}
     select
-	    t3.created    	    	    as created,
-	    toYear(t3.created)			as year,
-	    toMonth(t3.created)			as month,
-	    t2.d32_qid 					as qid,
-		t.d3_orgname				as orgname,
-		t3.airport_start			as airport,
-		t5.town						as city,
-		t7.country					as country 
+		    t3.created    	    	    as created,
+		    toYear(t3.created)			as year,
+		    toMonth(t3.created)			as month,
+		    t2.d32_qid 					as qid,
+			t.d3_orgname				as orgname,
+			t3.airport_start			as airport,
+			t5.town						as city,
+			t7.country					as country 
     from {dict3_flat} t 
     join {dict31_flat} t2                     on t.d4_rid=t2.d31_operatorid
     left join {dict90_flat} t3                on t3.tid=t.d4_rid and t3.qid=t2.d32_qid
@@ -871,28 +893,28 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
     sql_9 = f"""
     insert into {d9}
     select
-	    t3.created    	    	    as created,
-	    toYear(t3.created)			as year,
-	    toMonth(t3.created)			as month,
-	    case when toMonth(t3.created)=1 then 'Январь'
-	    	 when toMonth(t3.created)=2 then 'Февраль'
-	    	 when toMonth(t3.created)=3 then 'Март'
-	    	 when toMonth(t3.created)=4 then 'Апрель'
-	    	 when toMonth(t3.created)=5 then 'Май'
-	    	 when toMonth(t3.created)=6 then 'Июнь'
-	    	 when toMonth(t3.created)=7 then 'Июль'
-	    	 when toMonth(t3.created)=8 then 'Август'
-	    	 when toMonth(t3.created)=9 then 'Сентябрь'
-	    	 when toMonth(t3.created)=10 then 'Октябрь'
-	    	 when toMonth(t3.created)=11 then 'Ноябрь'
-	    	 when toMonth(t3.created)=12 then 'Декабрь'
-	    	 else null
-	    end 						as month_russian,
-	    t2.d32_qid 					as qid,
-		t.d3_orgname				as orgname,
-		t3.airport_start			as airport,
-		t7.country					as country,
-		t5.town						as city
+		    t3.created    	    	    as created,
+		    toYear(t3.created)			as year,
+		    toMonth(t3.created)			as month,
+		    case when toMonth(t3.created)=1 then 'Январь'
+		    	 when toMonth(t3.created)=2 then 'Февраль'
+		    	 when toMonth(t3.created)=3 then 'Март'
+		    	 when toMonth(t3.created)=4 then 'Апрель'
+		    	 when toMonth(t3.created)=5 then 'Май'
+		    	 when toMonth(t3.created)=6 then 'Июнь'
+		    	 when toMonth(t3.created)=7 then 'Июль'
+		    	 when toMonth(t3.created)=8 then 'Август'
+		    	 when toMonth(t3.created)=9 then 'Сентябрь'
+		    	 when toMonth(t3.created)=10 then 'Октябрь'
+		    	 when toMonth(t3.created)=11 then 'Ноябрь'
+		    	 when toMonth(t3.created)=12 then 'Декабрь'
+		    	 else null
+		    end 						as month_russian,
+		    t2.d32_qid 					as qid,
+			t.d3_orgname				as orgname,
+			t3.airport_start			as airport,
+			t7.country					as country,
+			t5.town						as city
     from {dict3_flat} t 
     join {dict31_flat} t2 	 	on t.d4_rid=t2.d31_operatorid
     left join {dict90_flat} t3  on t3.tid=t.d4_rid and t3.qid=t2.d32_qid       
@@ -910,7 +932,7 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
     sql_11 = f"""
     insert into {d11}
     select
-    	    t3.created    	    	    as created,
+			t3.created    	    	    as created,
     	    toYear(t3.created)			as year,
     	    toMonth(t3.created)			as month,
     	    case when toMonth(t3.created)=1 then 'Январь'
@@ -943,24 +965,24 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
     sql_12 = f"""
     insert into {d12}
     select
-        t3.created                           as created,
-        toYear(created)                      as year,
-        t.d3_orgname                         as orgname,
-        t.d4_allow_auto_tour                 as allow_auto_tour,
-        case when t.d4_allow_auto_tour=1 then 'Да' 
-             else 'Нет' 
-        end                                  as allow_auto_tour_russian,
-        t3.from_cabinet                      as from_cabinet,
-        t.d4_list                            as list,
-        case when t.d4_list=0 then 'Туроператоры'
-             when t.d4_list=1 then 'Фрахтователи'
-             when t.d4_list=2 then 'Вышедшие туроператоры'
-             when t.d4_list=3 then 'Приостановившиеся деятельность'
-             when t.d4_list=4 then 'Скрытые'
-             else null
-        end                                  as list_russian,
-        t3.passport                          as passport,
-        t2.d32_qid                           as qid
+	        t3.created                           as created,
+	        toYear(created)                      as year,
+	        t.d3_orgname                         as orgname,
+	        t.d4_allow_auto_tour                 as allow_auto_tour,
+	        case when t.d4_allow_auto_tour=1 then 'Да' 
+	             else 'Нет' 
+	        end                                  as allow_auto_tour_russian,
+	        t3.from_cabinet                      as from_cabinet,
+	        t.d4_list                            as list,
+	        case when t.d4_list=0 then 'Туроператоры'
+	             when t.d4_list=1 then 'Фрахтователи'
+	             when t.d4_list=2 then 'Вышедшие туроператоры'
+	             when t.d4_list=3 then 'Приостановившиеся деятельность'
+	             when t.d4_list=4 then 'Скрытые'
+	             else null
+	        end                                  as list_russian,
+	        t3.passport                          as passport,
+	        t2.d32_qid                           as qid
     from {dict3_flat} t
     join {dict31_flat} t2      on t.d4_rid = t2.d31_operatorid
     left join {dict90_flat} t3 on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
@@ -975,26 +997,26 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
     sql_19 = f"""
     insert into {d19}
     select
-        t3.created                              as created,
-        toYear(t3.created)                      as year,
-        toMonth(t3.created)                     as month,
-        case when toMonth(t3.created)=1  then 'Январь'
-             when toMonth(t3.created)=2  then 'Февраль'
-             when toMonth(t3.created)=3  then 'Март'
-             when toMonth(t3.created)=4  then 'Апрель'
-             when toMonth(t3.created)=5  then 'Май'
-             when toMonth(t3.created)=6  then 'Июнь'
-             when toMonth(t3.created)=7  then 'Июль'
-             when toMonth(t3.created)=8  then 'Август'
-             when toMonth(t3.created)=9  then 'Сентябрь'
-             when toMonth(t3.created)=10 then 'Октябрь'
-             when toMonth(t3.created)=11 then 'Ноябрь'
-             when toMonth(t3.created)=12 then 'Декабрь'
-             else null
-        end                                     as month_russian,
-        t.d3_orgname                            as orgname,
-        t2.d32_qid                              as qid,
-        t4.country                              as country
+	        t3.created                              as created,
+	        toYear(t3.created)                      as year,
+	        toMonth(t3.created)                     as month,
+	        case when toMonth(t3.created)=1  then 'Январь'
+	             when toMonth(t3.created)=2  then 'Февраль'
+	             when toMonth(t3.created)=3  then 'Март'
+	             when toMonth(t3.created)=4  then 'Апрель'
+	             when toMonth(t3.created)=5  then 'Май'
+	             when toMonth(t3.created)=6  then 'Июнь'
+	             when toMonth(t3.created)=7  then 'Июль'
+	             when toMonth(t3.created)=8  then 'Август'
+	             when toMonth(t3.created)=9  then 'Сентябрь'
+	             when toMonth(t3.created)=10 then 'Октябрь'
+	             when toMonth(t3.created)=11 then 'Ноябрь'
+	             when toMonth(t3.created)=12 then 'Декабрь'
+	             else null
+	        end                                     as month_russian,
+	        t.d3_orgname                            as orgname,
+	        t2.d32_qid                              as qid,
+	        t4.country                              as country
     from {dict3_flat} t
     join {dict31_flat} t2      on t.d4_rid = t2.d31_operatorid
     left join {dict90_flat} t3 on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
@@ -1056,8 +1078,8 @@ with DAG(
     schedule="0 * * * *",
     catchup=False,
     default_args=default_args,
-	max_active_runs=1,                            # добавили: не накладывать full reload
-    dagrun_timeout=timedelta(minutes=55),         # добавили: общий таймаут на DAG run
+	max_active_runs=1,
+    dagrun_timeout=timedelta(minutes=55),
     tags=["sync", "mysql", "clickhouse", "tourservice", "full_reload", "dashboards"],
 ) as dag:
 
