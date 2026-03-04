@@ -1029,12 +1029,12 @@ def _dashboard_inserts(ch_db: str) -> Dict[str, str]:
     """
 
     return {
-        "dashboard_5": sql_5,
-        "dashboard_7": sql_7,
-        "dashboard_9": sql_9,
-        "dashboard_11": sql_11,
-        "dashboard_12": sql_12,
-        "dashboard_19": sql_19,
+        "t_so_dashboard_5": sql_5,
+        "t_so_dashboard_7": sql_7,
+        "t_so_dashboard_9": sql_9,
+        "t_so_dashboard_11": sql_11,
+        "t_so_dashboard_12": sql_12,
+        "t_so_dashboard_19": sql_19,
     }
 
 
