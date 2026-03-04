@@ -1112,32 +1112,32 @@ with DAG(
         d5 = PythonOperator(
             task_id="refresh_dashboard_5",
             python_callable=refresh_one_dashboard,
-            op_kwargs={"table": "dashboard_5"},
+            op_kwargs={"table": "t_so_dashboard_5"},
         )
         d7 = PythonOperator(
             task_id="refresh_dashboard_7",
             python_callable=refresh_one_dashboard,
-            op_kwargs={"table": "dashboard_7"},
+            op_kwargs={"table": "t_so_dashboard_7"},
         )
         d9 = PythonOperator(
             task_id="refresh_dashboard_9",
             python_callable=refresh_one_dashboard,
-            op_kwargs={"table": "dashboard_9"},
+            op_kwargs={"table": "t_so_dashboard_9"},
         )
         d11 = PythonOperator(
             task_id="refresh_dashboard_11",
             python_callable=refresh_one_dashboard,
-            op_kwargs={"table": "dashboard_11"},
+            op_kwargs={"table": "t_so_dashboard_11"},
         )
         d12 = PythonOperator(
             task_id="refresh_dashboard_12",
             python_callable=refresh_one_dashboard,
-            op_kwargs={"table": "dashboard_12"},
+            op_kwargs={"table": "t_so_dashboard_12"},
         )
         d19 = PythonOperator(
             task_id="refresh_dashboard_19",
             python_callable=refresh_one_dashboard,
-            op_kwargs={"table": "dashboard_19"},
+            op_kwargs={"table": "t_so_dashboard_19"},
         )
 
         d5 >> d7 >> d9 >> d11 >> d12 >> d19
