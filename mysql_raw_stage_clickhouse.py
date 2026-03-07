@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, date, time as dtime, timedelta
 
 import pymysql
 import clickhouse_connect
@@ -21,17 +21,25 @@ DEBUG_SAMPLE_ROWS = 20
 
 
 TABLES = [
-    {"table_name": "dict13", "raw_table": "dict13_raw", "stage_table": "dict13_stage"},
-    {"table_name": "dict14", "raw_table": "dict14_raw", "stage_table": "dict14_stage"},
-    {"table_name": "dict15", "raw_table": "dict15_raw", "stage_table": "dict15_stage"},
-    {"table_name": "dict59", "raw_table": "dict59_raw", "stage_table": "dict59_stage"},
-    {"table_name": "dict31", "raw_table": "dict31_raw", "stage_table": "dict31_stage"},
-    {"table_name": "dict32", "raw_table": "dict32_raw", "stage_table": "dict32_stage"},
-    {"table_name": "dict90", "raw_table": "dict90_raw", "stage_table": "dict90_stage"},
-    {"table_name": "dict91", "raw_table": "dict91_raw", "stage_table": "dict91_stage"},
-    {"table_name": "dict3", "raw_table": "dict3_raw", "stage_table": "dict3_stage"},
-    {"table_name": "dict4", "raw_table": "dict4_raw", "stage_table": "dict4_stage"}
+    {"table_name": "dict3",  "raw_table": "dict3_raw",  "date_cols": ["orgdate"], "datetime_cols": ["changed"]},
+    {"table_name": "dict4",  "raw_table": "dict4_raw",  "date_cols": ["guarantee_date", "created", "hajj"], "datetime_cols": ["changed"]},
+    {"table_name": "dict13", "raw_table": "dict13_raw", "date_cols": [], "datetime_cols": ["changed"]},
+    {"table_name": "dict14", "raw_table": "dict14_raw", "date_cols": [], "datetime_cols": ["changed"]},
+    {"table_name": "dict15", "raw_table": "dict15_raw", "date_cols": [], "datetime_cols": ["changed"]},
+    {"table_name": "dict16", "raw_table": "dict16_raw", "date_cols": [], "datetime_cols": ["changed"]},
+    {"table_name": "dict31", "raw_table": "dict31_raw", "date_cols": [], "datetime_cols": ["changed"]},
+    {"table_name": "dict32", "raw_table": "dict32_raw", "date_cols": [], "datetime_cols": ["changed", "datetime", "first_datetime"]},
+    {"table_name": "dict59", "raw_table": "dict59_raw", "date_cols": [], "datetime_cols": ["changed"]},
+    {"table_name": "dict90", "raw_table": "dict90_raw", "date_cols": ["date_start", "date_end", "created"], "datetime_cols": ["changed"]},
+    {"table_name": "dict91", "raw_table": "dict91_raw", "date_cols": ["sub_date_start", "sub_date_end"], "datetime_cols": ["changed"]},
 ]
+
+
+ZERO_DATE_STRINGS = {
+    "0000-00-00",
+    "0000-00-00 00:00:00",
+    "0000-00-00 00:00:00.000000",
+}
 
 
 def _mysql_conn():
@@ -63,9 +71,97 @@ def _ch_client():
         port=int(conn.port) if conn.port else 8123,
         username=conn.login or "default",
         password=conn.password or "",
+        interface="http",
         database=db,
+        compress=True,
     )
     return db, client
+
+
+def _decode_if_bytes(x):
+    if isinstance(x, (bytes, bytearray)):
+        return x.decode("utf-8", errors="ignore")
+    return x
+
+
+def _to_date(x):
+    if x is None:
+        return None
+
+    x = _decode_if_bytes(x)
+
+    if isinstance(x, date) and not isinstance(x, datetime):
+        return x
+
+    if isinstance(x, datetime):
+        return x.date()
+
+    if isinstance(x, str):
+        s = x.strip()
+        if not s:
+            return None
+        if s in ZERO_DATE_STRINGS or s.startswith("0000-00-00"):
+            return None
+
+        s10 = s[:10]
+
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+            try:
+                return datetime.strptime(s10, fmt).date()
+            except ValueError:
+                pass
+
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
+            try:
+                return datetime.strptime(s[:26], fmt).date()
+            except ValueError:
+                pass
+
+        return None
+
+    return None
+
+
+def _to_dt(x):
+    if x is None:
+        return None
+
+    x = _decode_if_bytes(x)
+
+    if isinstance(x, datetime):
+        return x
+
+    if isinstance(x, date):
+        return datetime.combine(x, dtime.min)
+
+    if isinstance(x, str):
+        s = x.strip()
+        if not s:
+            return None
+        if s in ZERO_DATE_STRINGS or s.startswith("0000-00-00"):
+            return None
+
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
+            try:
+                return datetime.strptime(s[:26], fmt)
+            except ValueError:
+                pass
+
+        for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+            try:
+                return datetime.strptime(s[:26], fmt)
+            except ValueError:
+                pass
+
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+            try:
+                return datetime.combine(datetime.strptime(s[:10], fmt).date(), dtime.min)
+            except ValueError:
+                pass
+
+        return None
+
+    return None
 
 
 def _get_watermark(ch_client, table_name: str):
@@ -91,7 +187,28 @@ def _insert_watermark(ch_client, table_name: str, max_changed):
     """)
 
 
-def incremental_load_table(table_name: str, raw_table: str):
+def _normalize_rows(rows, date_cols=None, datetime_cols=None):
+    date_cols = set(date_cols or [])
+    datetime_cols = set(datetime_cols or [])
+
+    fixed_rows = []
+    for row in rows:
+        fixed = dict(row)
+
+        for col in date_cols:
+            if col in fixed:
+                fixed[col] = _to_date(fixed[col])
+
+        for col in datetime_cols:
+            if col in fixed:
+                fixed[col] = _to_dt(fixed[col])
+
+        fixed_rows.append(fixed)
+
+    return fixed_rows
+
+
+def incremental_load_table(table_name: str, raw_table: str, date_cols=None, datetime_cols=None):
     print(f"=== START incremental load: {table_name} -> {raw_table} ===")
 
     _, ch_client = _ch_client()
@@ -124,6 +241,12 @@ def incremental_load_table(table_name: str, raw_table: str):
             print(f"No new rows for {table_name}")
             return
 
+        rows = _normalize_rows(
+            rows,
+            date_cols=date_cols,
+            datetime_cols=datetime_cols,
+        )
+
         columns = list(rows[0].keys())
         data = [[row[col] for col in columns] for row in rows]
 
@@ -133,7 +256,7 @@ def incremental_load_table(table_name: str, raw_table: str):
             column_names=columns,
         )
 
-        max_changed = max(row["changed"] for row in rows)
+        max_changed = max(row["changed"] for row in rows if row["changed"] is not None)
 
         if max_changed > last_changed:
             _insert_watermark(ch_client, table_name, max_changed)
@@ -180,6 +303,8 @@ with DAG(
                 op_kwargs={
                     "table_name": cfg["table_name"],
                     "raw_table": cfg["raw_table"],
+                    "date_cols": cfg.get("date_cols", []),
+                    "datetime_cols": cfg.get("datetime_cols", []),
                 },
             )
 
