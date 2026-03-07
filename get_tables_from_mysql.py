@@ -1,98 +1,89 @@
-from __future__ import annotations
-
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.hooks.base import BaseHook
 from datetime import datetime, timedelta
 
 import pymysql
-
-from airflow import DAG
-from airflow.hooks.base import BaseHook
-from airflow.operators.python import PythonOperator
+import clickhouse_connect
 
 
 MYSQL_CONN_ID = "tourservice_mysql"
-MYSQL_SCHEMA = None
+CH_CONN_ID = "clickhouse"
+
+TABLE_NAME = "dict32"
+RAW_TABLE = "dict32_raw"
+OVERLAP_MINUTES = 5
 
 
-def _mysql_conn():
-    conn = BaseHook.get_connection(MYSQL_CONN_ID)
-    schema = MYSQL_SCHEMA or conn.schema
+def incremental_load():
 
-    connection = pymysql.connect(
-        host=conn.host,
-        port=int(conn.port),
-        user=conn.login,
-        password=conn.password,
-        database=schema,
-        connect_timeout=60,
-        read_timeout=600,
-        write_timeout=600,
-        charset="utf8",
-        cursorclass=pymysql.cursors.DictCursor,
-        autocommit=True,
+    # --- ClickHouse connection ---
+    ch_conn = BaseHook.get_connection(CH_CONN_ID)
+    ch_client = clickhouse_connect.get_client(
+        host=ch_conn.host,
+        port=ch_conn.port,
+        username=ch_conn.login,
+        password=ch_conn.password,
+        database=ch_conn.schema
     )
-    return schema, connection
 
+    # --- получить watermark ---
+    result = ch_client.query(f"""
+        SELECT last_changed
+        FROM etl_watermarks
+        WHERE table_name = '{TABLE_NAME}'
+        ORDER BY updated_at DESC
+        LIMIT 1
+    """)
 
-def print_mysql_schema():
-    schema, mysql_connection = _mysql_conn()
+    last_changed = result.result_rows[0][0]
 
-    print(f"\n=== MYSQL SCHEMA: {schema} ===\n")
+    # overlap
+    last_changed_with_overlap = last_changed - timedelta(minutes=OVERLAP_MINUTES)
 
-    try:
-        with mysql_connection.cursor() as cur:
+    # --- MySQL connection ---
+    mysql_conn = BaseHook.get_connection(MYSQL_CONN_ID)
 
-            # получаем все таблицы
-            cur.execute(
-                """
-                SELECT table_name
-                FROM information_schema.tables
-                WHERE table_schema = %s
-                ORDER BY table_name
-                """,
-                (schema,),
-            )
+    mysql = pymysql.connect(
+        host=mysql_conn.host,
+        port=int(mysql_conn.port),
+        user=mysql_conn.login,
+        password=mysql_conn.password,
+        database=mysql_conn.schema,
+        cursorclass=pymysql.cursors.DictCursor
+    )
 
-            tables = [r["table_name"] for r in cur.fetchall()]
+    cursor = mysql.cursor()
 
-            print(f"Found {len(tables)} tables\n")
+    query = f"""
+        SELECT *
+        FROM {TABLE_NAME}
+        WHERE changed >= %s
+        ORDER BY changed, rid
+    """
 
-            for table in tables:
+    cursor.execute(query, (last_changed_with_overlap,))
+    rows = cursor.fetchall()
 
-                print(f"\n==============================")
-                print(f"TABLE: {table}")
-                print(f"==============================")
+    if not rows:
+        print("No new rows")
+        return
 
-                cur.execute(
-                    """
-                    SELECT
-                        ordinal_position,
-                        column_name,
-                        column_type,
-                        is_nullable,
-                        column_key,
-                        extra
-                    FROM information_schema.columns
-                    WHERE table_schema = %s
-                    AND table_name = %s
-                    ORDER BY ordinal_position
-                    """,
-                    (schema, table),
-                )
+    # --- вставка в ClickHouse ---
+    ch_client.insert(
+        RAW_TABLE,
+        rows
+    )
 
-                columns = cur.fetchall()
+    # --- новый watermark ---
+    max_changed = max(row["changed"] for row in rows)
 
-                for c in columns:
-                    print(
-                        f"{c['ordinal_position']:>3}. "
-                        f"{c['column_name']} | "
-                        f"{c['column_type']} | "
-                        f"nullable={c['is_nullable']} | "
-                        f"key={c['column_key']} | "
-                        f"{c['extra']}"
-                    )
+    ch_client.command(f"""
+        INSERT INTO etl_watermarks (table_name, last_changed)
+        VALUES ('{TABLE_NAME}', toDateTime('{max_changed}'))
+    """)
 
-    finally:
-        mysql_connection.close()
+    print(f"Loaded {len(rows)} rows. New watermark = {max_changed}")
 
 
 default_args = {
@@ -101,17 +92,16 @@ default_args = {
     "retry_delay": timedelta(minutes=1),
 }
 
-
 with DAG(
-    dag_id="mysql_print_schema_serzhan",
+    dag_id="test_incremental_dict32",
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
     default_args=default_args,
-    tags=["mysql", "schema", "debug"],
+    tags=["test", "incremental"],
 ) as dag:
 
-    t = PythonOperator(
-        task_id="print_mysql_schema",
-        python_callable=print_mysql_schema,
+    load_incremental = PythonOperator(
+        task_id="load_incremental_dict32",
+        python_callable=incremental_load
     )
