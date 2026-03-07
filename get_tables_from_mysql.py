@@ -82,6 +82,10 @@ def incremental_load():
             """
             cursor.execute(query, (last_changed_with_overlap,))
             rows = cursor.fetchall()
+            print(f"Fetched {len(rows)} rows from MySQL")
+
+            for r in rows[:20]:
+                print(r)
 
         if not rows:
             print(f"No new rows for {TABLE_NAME}")
