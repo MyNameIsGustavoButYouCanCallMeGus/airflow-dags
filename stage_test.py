@@ -1,89 +1,116 @@
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from airflow.hooks.base import BaseHook
 from datetime import datetime, timedelta
 
 import pymysql
 import clickhouse_connect
 
+from airflow import DAG
+from airflow.hooks.base import BaseHook
+from airflow.operators.python import PythonOperator
+
 
 MYSQL_CONN_ID = "tourservice_mysql"
 CH_CONN_ID = "clickhouse"
+
+MYSQL_SCHEMA = None
+CH_DB = None
 
 TABLE_NAME = "dict32"
 RAW_TABLE = "dict32_raw"
 OVERLAP_MINUTES = 5
 
 
-def incremental_load():
+def _mysql_conn():
+    conn = BaseHook.get_connection(MYSQL_CONN_ID)
+    schema = MYSQL_SCHEMA or conn.schema
 
-    # --- ClickHouse connection ---
-    ch_conn = BaseHook.get_connection(CH_CONN_ID)
-    ch_client = clickhouse_connect.get_client(
-        host=ch_conn.host,
-        port=ch_conn.port,
-        username=ch_conn.login,
-        password=ch_conn.password,
-        database=ch_conn.schema
+    connection = pymysql.connect(
+        host=conn.host,
+        port=int(conn.port),
+        user=conn.login,
+        password=conn.password,
+        database=schema,
+        connect_timeout=60,
+        read_timeout=600,
+        write_timeout=600,
+        charset="utf8",
+        cursorclass=pymysql.cursors.DictCursor,
+        autocommit=True,
     )
+    return schema, connection
 
-    # --- получить watermark ---
-    result = ch_client.query(f"""
+
+def _ch_client():
+    conn = BaseHook.get_connection(CH_CONN_ID)
+    db = CH_DB or (conn.schema or "default")
+
+    client = clickhouse_connect.get_client(
+        host=conn.host,
+        port=int(conn.port) if conn.port else 8123,
+        username=conn.login or "default",
+        password=conn.password or "",
+        database=db,
+    )
+    return db, client
+
+
+def incremental_load():
+    _, ch_client = _ch_client()
+
+    wm_sql = f"""
         SELECT last_changed
         FROM etl_watermarks
         WHERE table_name = '{TABLE_NAME}'
         ORDER BY updated_at DESC
         LIMIT 1
-    """)
+    """
+    wm_res = ch_client.query(wm_sql)
 
-    last_changed = result.result_rows[0][0]
+    if not wm_res.result_rows:
+        raise ValueError(f"Watermark for table {TABLE_NAME} not found in etl_watermarks")
 
-    # overlap
+    last_changed = wm_res.result_rows[0][0]
     last_changed_with_overlap = last_changed - timedelta(minutes=OVERLAP_MINUTES)
 
-    # --- MySQL connection ---
-    mysql_conn = BaseHook.get_connection(MYSQL_CONN_ID)
+    _, mysql = _mysql_conn()
+    try:
+        with mysql.cursor() as cursor:
+            query = f"""
+                SELECT *
+                FROM {TABLE_NAME}
+                WHERE changed >= %s
+                ORDER BY changed, rid
+            """
+            cursor.execute(query, (last_changed_with_overlap,))
+            rows = cursor.fetchall()
 
-    mysql = pymysql.connect(
-        host=mysql_conn.host,
-        port=int(mysql_conn.port),
-        user=mysql_conn.login,
-        password=mysql_conn.password,
-        database=mysql_conn.schema,
-        cursorclass=pymysql.cursors.DictCursor
-    )
+        if not rows:
+            print(f"No new rows for {TABLE_NAME}")
+            return
 
-    cursor = mysql.cursor()
+        # clickhouse_connect обычно надежнее ест list[list], чем list[dict]
+        columns = list(rows[0].keys())
+        data = [[row[col] for col in columns] for row in rows]
 
-    query = f"""
-        SELECT *
-        FROM {TABLE_NAME}
-        WHERE changed >= %s
-        ORDER BY changed, rid
-    """
+        ch_client.insert(
+            table=RAW_TABLE,
+            data=data,
+            column_names=columns,
+        )
 
-    cursor.execute(query, (last_changed_with_overlap,))
-    rows = cursor.fetchall()
+        max_changed = max(row["changed"] for row in rows)
 
-    if not rows:
-        print("No new rows")
-        return
+        ch_client.command(f"""
+            INSERT INTO etl_watermarks (table_name, last_changed)
+            VALUES ('{TABLE_NAME}', toDateTime('{max_changed:%Y-%m-%d %H:%M:%S}'))
+        """)
 
-    # --- вставка в ClickHouse ---
-    ch_client.insert(
-        RAW_TABLE,
-        rows
-    )
+        print(
+            f"Loaded {len(rows)} rows into {RAW_TABLE}. "
+            f"Watermark updated to {max_changed:%Y-%m-%d %H:%M:%S}"
+        )
 
-    # --- новый watermark ---
-    max_changed = max(row["changed"] for row in rows)
-
-    ch_client.command(f"""
-        INSERT INTO etl_watermarks (table_name, last_changed)
-        VALUES ('{TABLE_NAME}', toDateTime('{max_changed}'))
-    """)
-
-    print(f"Loaded {len(rows)} rows. New watermark = {max_changed}")
+    finally:
+        mysql.close()
 
 
 default_args = {
@@ -98,10 +125,10 @@ with DAG(
     schedule=None,
     catchup=False,
     default_args=default_args,
-    tags=["test", "incremental"],
+    tags=["test", "incremental", "mysql", "clickhouse"],
 ) as dag:
 
-    load_incremental = PythonOperator(
+    load_incremental_dict32 = PythonOperator(
         task_id="load_incremental_dict32",
-        python_callable=incremental_load
+        python_callable=incremental_load,
     )
