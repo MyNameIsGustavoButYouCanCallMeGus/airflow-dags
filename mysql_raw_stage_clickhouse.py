@@ -19,20 +19,18 @@ CH_DB = None
 OVERLAP_MINUTES = 5
 DEBUG_SAMPLE_ROWS = 20
 
-# Укажи здесь все свои таблицы.
-# stage указал тоже, чтобы конфиг был полный, даже если сейчас DAG пишет только в raw.
+
 TABLES = [
     {"table_name": "dict13", "raw_table": "dict13_raw", "stage_table": "dict13_stage"},
     {"table_name": "dict14", "raw_table": "dict14_raw", "stage_table": "dict14_stage"},
     {"table_name": "dict15", "raw_table": "dict15_raw", "stage_table": "dict15_stage"},
-    {"table_name": "dict16", "raw_table": "dict16_raw", "stage_table": "dict16_stage"},
+    {"table_name": "dict59", "raw_table": "dict59_raw", "stage_table": "dict59_stage"},
     {"table_name": "dict31", "raw_table": "dict31_raw", "stage_table": "dict31_stage"},
     {"table_name": "dict32", "raw_table": "dict32_raw", "stage_table": "dict32_stage"},
     {"table_name": "dict90", "raw_table": "dict90_raw", "stage_table": "dict90_stage"},
     {"table_name": "dict91", "raw_table": "dict91_raw", "stage_table": "dict91_stage"},
-    # добавь сюда остальные таблицы, если они есть
-    # {"table_name": "table_x", "raw_table": "table_x_raw", "stage_table": "table_x_stage"},
-    # {"table_name": "table_y", "raw_table": "table_y_raw", "stage_table": "table_y_stage"},
+    {"table_name": "dict3", "raw_table": "dict3_raw", "stage_table": "dict3_stage"},
+    {"table_name": "dict4", "raw_table": "dict4_raw", "stage_table": "dict4_stage"}
 ]
 
 
