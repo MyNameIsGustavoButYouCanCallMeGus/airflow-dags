@@ -1,8 +1,10 @@
 import os
 import time
 import re
+import calendar
 from datetime import datetime, date, time as dtime, timedelta
-###updated
+##updated
+##updated
 import pymysql
 import clickhouse_connect
 
@@ -175,6 +177,13 @@ def _to_dt(x):
     return None
 
 
+def _to_ch_datetime_int(x):
+    dt = _to_dt(x)
+    if dt is None:
+        return None
+    return calendar.timegm(dt.timetuple())
+
+
 # =========================
 # CLICKHOUSE SCHEMA HELPERS
 # =========================
@@ -202,7 +211,9 @@ def _normalize_rows_by_ch_schema(rows, ch_col_types: dict[str, str]):
 
             if ch_type == "Date":
                 fixed[col] = _to_date(fixed[col])
-            elif ch_type.startswith("DateTime"):
+            elif ch_type == "DateTime":
+                fixed[col] = _to_ch_datetime_int(fixed[col])
+            elif ch_type.startswith("DateTime64"):
                 fixed[col] = _to_dt(fixed[col])
             else:
                 fixed[col] = _decode_if_bytes(fixed[col])
@@ -286,6 +297,13 @@ def incremental_load_table(table_name: str, raw_table: str):
                 print(f"No new rows for {table_name}")
                 return
 
+            changed_values = [_to_dt(row.get("changed")) for row in rows if row.get("changed") is not None]
+            changed_values = [x for x in changed_values if x is not None]
+            if not changed_values:
+                raise ValueError(f"No valid changed values after reading MySQL for table {table_name}")
+
+            max_changed = max(changed_values)
+
             rows = _normalize_rows_by_ch_schema(rows, ch_col_types)
             _debug_temporal_columns(rows, ch_col_types)
 
@@ -298,12 +316,6 @@ def incremental_load_table(table_name: str, raw_table: str):
                 data=data,
                 column_names=columns,
             )
-
-            changed_values = [row.get("changed") for row in rows if row.get("changed") is not None]
-            if not changed_values:
-                raise ValueError(f"No valid changed values after normalization for table {table_name}")
-
-            max_changed = max(changed_values)
 
             if max_changed > last_changed:
                 _insert_watermark(ch_client, table_name, max_changed)
