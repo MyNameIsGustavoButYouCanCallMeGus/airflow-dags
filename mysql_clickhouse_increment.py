@@ -1,5 +1,5 @@
 import os
-###final update3
+###final update4
 import time
 import re
 import calendar
@@ -480,7 +480,7 @@ def build_dict3_flat_from_stage():
         t.enabled                                       AS d3_enabled,
         t.orgname                                       AS d3_orgname,
         t.orgtype                                       AS d3_orgtype,
-        CAST(t.orgdate AS Nullable(Date))               AS d3_orgdate,
+        ifNull(CAST(t.orgdate AS Nullable(Date)), toDate('1970-01-01')) AS d3_orgdate,
         t.country                                       AS d3_country,
         t.town                                          AS d3_town,
         t.address                                       AS d3_address,
@@ -502,7 +502,7 @@ def build_dict3_flat_from_stage():
         t2.commission                                   AS d4_commission,
         t2.guarantee                                    AS d4_guarantee,
         t2.guarantee_num                                AS d4_guarantee_num,
-        CAST(t2.guarantee_date AS Nullable(Date))       AS d4_guarantee_date,
+        ifNull(CAST(t2.guarantee_date AS Nullable(Date)), toDate('1970-01-01')) AS d4_guarantee_date,
         t2.chieffname                                   AS d4_chieffname,
         t2.agreement                                    AS d4_agreement,
         CAST(t2.created AS Nullable(Date))              AS d4_created,
@@ -523,7 +523,7 @@ def build_dict3_flat_from_stage():
         t2.is_agent                                     AS d4_is_agent,
         t2.remarks                                      AS d4_remarks,
         t2.auto_bad_tour                                AS d4_auto_bad_tour,
-        CAST(t2.hajj AS Nullable(Date))                 AS d4_hajj,
+        ifNull(CAST(t2.hajj AS Nullable(Date)), toDate('1970-01-01'))   AS d4_hajj,
         t2.description                                  AS d4_description
     FROM `{ch_db}`.`dict3_stage` t
     LEFT JOIN `{ch_db}`.`dict4_stage` t2
