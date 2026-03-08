@@ -134,12 +134,12 @@ def _to_dt(x):
     if x is None:
         return None
     x = _decode_if_bytes(x)
-
+    ### updated
     if isinstance(x, datetime):
-        return x.strftime("%Y-%m-%d %H:%M:%S")
+        return x.replace(tzinfo=timezone.utc)
 
     if isinstance(x, date):
-        return datetime.combine(x, dtime.min).strftime("%Y-%m-%d %H:%M:%S")
+        return datetime.combine(x, dtime.min).replace(tzinfo=timezone.utc)
 
     if isinstance(x, str):
         s = x.strip()
@@ -150,20 +150,20 @@ def _to_dt(x):
 
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
             try:
-                return datetime.strptime(s[:26], fmt).strftime("%Y-%m-%d %H:%M:%S")
+                return datetime.strptime(s[:26], fmt).replace(tzinfo=timezone.utc)
             except ValueError:
                 pass
 
         for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
             try:
-                return datetime.strptime(s[:26], fmt).strftime("%Y-%m-%d %H:%M:%S")
+                return datetime.strptime(s[:26], fmt).replace(tzinfo=timezone.utc)
             except ValueError:
                 pass
 
         for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
             try:
                 d = datetime.strptime(s[:10], fmt).date()
-                return datetime.combine(d, dtime.min).strftime("%Y-%m-%d %H:%M:%S")
+                return datetime.combine(d, dtime.min).replace(tzinfo=timezone.utc)
             except ValueError:
                 pass
 
