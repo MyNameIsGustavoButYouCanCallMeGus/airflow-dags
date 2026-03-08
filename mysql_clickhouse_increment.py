@@ -1,6 +1,8 @@
+import os
+import time
 import re
 from datetime import datetime, date, time as dtime, timedelta
-from datetime import timezone
+# from datetime import timezone
 
 import pymysql
 import clickhouse_connect
@@ -10,6 +12,9 @@ from airflow.hooks.base import BaseHook
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.utils.task_group import TaskGroup
+
+os.environ["TZ"] = "UTC"
+time.tzset()
 
 MYSQL_CONN_ID = "tourservice_mysql"
 CH_CONN_ID = "clickhouse"
