@@ -2,9 +2,9 @@ import os
 import time
 import re
 import calendar
+####updaaate
 from datetime import datetime, date, time as dtime, timedelta
-##updated
-##updated
+
 import pymysql
 import clickhouse_connect
 
@@ -25,6 +25,7 @@ CH_DB = None
 
 OVERLAP_MINUTES = 5
 DEBUG_SAMPLE_ROWS = 20
+MYSQL_BATCH_SIZE = 10_000
 
 ZERO_DATE_STRINGS = {
     "0000-00-00",
@@ -188,10 +189,6 @@ def _to_ch_datetime_int(x):
 # CLICKHOUSE SCHEMA HELPERS
 # =========================
 def _get_ch_column_types(ch_client, raw_table: str) -> dict[str, str]:
-    """
-    Returns:
-    { "rid": "UInt64", "orgdate": "Date", "changed": "DateTime", ... }
-    """
     res = ch_client.query(f"DESCRIBE TABLE {raw_table}")
     out = {}
     for row in res.result_rows:
@@ -222,7 +219,7 @@ def _normalize_rows_by_ch_schema(rows, ch_col_types: dict[str, str]):
     return fixed_rows
 
 
-def _debug_temporal_columns(rows, ch_col_types: dict[str, str]):
+def _debug_temporal_columns(rows, ch_col_types: dict[str, str], label: str = ""):
     temporal_cols = [
         col for col, t in ch_col_types.items()
         if t == "Date" or t.startswith("DateTime")
@@ -230,7 +227,7 @@ def _debug_temporal_columns(rows, ch_col_types: dict[str, str]):
     if not rows or not temporal_cols:
         return
 
-    print("DEBUG temporal column sample types:")
+    print(f"DEBUG temporal column sample types {label}:")
     for col in temporal_cols:
         vals = [r.get(col) for r in rows[:5] if col in r]
         types_ = [type(v).__name__ for v in vals]
@@ -251,7 +248,12 @@ def _get_watermark(ch_client, table_name: str):
     wm_res = ch_client.query(wm_sql)
     if not wm_res.result_rows:
         raise ValueError(f"Watermark for table {table_name} not found in etl_watermarks")
-    return wm_res.result_rows[0][0]
+
+    wm = wm_res.result_rows[0][0]
+    wm = _to_dt(wm)
+    if wm is None:
+        raise ValueError(f"Watermark for table {table_name} is invalid: {wm_res.result_rows[0][0]}")
+    return wm
 
 
 def _insert_watermark(ch_client, table_name: str, max_changed: datetime):
@@ -278,6 +280,11 @@ def incremental_load_table(table_name: str, raw_table: str):
     print(f"ClickHouse schema for {raw_table}: {ch_col_types}")
 
     _, mysql = _mysql_conn()
+
+    total_rows = 0
+    global_max_changed = None
+    debug_printed = False
+
     try:
         with mysql.cursor() as cursor:
             query = f"""
@@ -287,47 +294,72 @@ def incremental_load_table(table_name: str, raw_table: str):
                 ORDER BY changed, rid
             """
             cursor.execute(query, (last_changed_with_overlap,))
-            rows = cursor.fetchall()
 
-            print(f"Fetched {len(rows)} rows from MySQL for {table_name}")
-            for r in rows[:DEBUG_SAMPLE_ROWS]:
-                print(r)
+            while True:
+                rows = cursor.fetchmany(MYSQL_BATCH_SIZE)
 
-            if not rows:
-                print(f"No new rows for {table_name}")
-                return
+                if not rows:
+                    break
 
-            changed_values = [_to_dt(row.get("changed")) for row in rows if row.get("changed") is not None]
-            changed_values = [x for x in changed_values if x is not None]
-            if not changed_values:
-                raise ValueError(f"No valid changed values after reading MySQL for table {table_name}")
+                batch_size = len(rows)
+                total_rows += batch_size
+                print(f"Fetched batch: {batch_size} rows from MySQL for {table_name} (total={total_rows})")
 
-            max_changed = max(changed_values)
+                if not debug_printed:
+                    for r in rows[:DEBUG_SAMPLE_ROWS]:
+                        print(r)
 
-            rows = _normalize_rows_by_ch_schema(rows, ch_col_types)
-            _debug_temporal_columns(rows, ch_col_types)
+                changed_values = [_to_dt(row.get("changed")) for row in rows if row.get("changed") is not None]
+                changed_values = [x for x in changed_values if x is not None]
+                if not changed_values:
+                    raise ValueError(f"No valid changed values in current batch for table {table_name}")
 
-            # берем колонки в порядке ClickHouse raw table
-            columns = [col for col in ch_col_types.keys() if col in rows[0]]
-            data = [[row.get(col) for col in columns] for row in rows]
+                batch_max_changed = max(changed_values)
+                if global_max_changed is None or batch_max_changed > global_max_changed:
+                    global_max_changed = batch_max_changed
 
-            ch_client.insert(
-                table=raw_table,
-                data=data,
-                column_names=columns,
+                rows = _normalize_rows_by_ch_schema(rows, ch_col_types)
+
+                if not debug_printed:
+                    _debug_temporal_columns(rows, ch_col_types, label=f"for {table_name} first batch")
+                    debug_printed = True
+
+                columns = [col for col in ch_col_types.keys() if col in rows[0]]
+                data = [[row.get(col) for col in columns] for row in rows]
+
+                ch_client.insert(
+                    table=raw_table,
+                    data=data,
+                    column_names=columns,
+                )
+
+                print(
+                    f"Inserted batch: {batch_size} rows into {raw_table} "
+                    f"(total_inserted={total_rows}, batch_max_changed={batch_max_changed:%Y-%m-%d %H:%M:%S})"
+                )
+
+                del rows
+                del data
+
+        if total_rows == 0:
+            print(f"No new rows for {table_name}")
+            return
+
+        if global_max_changed is None:
+            raise ValueError(f"global_max_changed is None for table {table_name}")
+
+        if global_max_changed > last_changed:
+            _insert_watermark(ch_client, table_name, global_max_changed)
+            print(
+                f"Loaded {total_rows} rows into {raw_table}. "
+                f"Watermark updated to {global_max_changed:%Y-%m-%d %H:%M:%S}"
+            )
+        else:
+            print(
+                f"Loaded {total_rows} overlap rows into {raw_table}. "
+                f"Watermark not changed: {last_changed:%Y-%m-%d %H:%M:%S}"
             )
 
-            if max_changed > last_changed:
-                _insert_watermark(ch_client, table_name, max_changed)
-                print(
-                    f"Loaded {len(rows)} rows into {raw_table}. "
-                    f"Watermark updated to {max_changed:%Y-%m-%d %H:%M:%S}"
-                )
-            else:
-                print(
-                    f"Loaded {len(rows)} overlap rows into {raw_table}. "
-                    f"Watermark not changed: {last_changed:%Y-%m-%d %H:%M:%S}"
-                )
     finally:
         mysql.close()
 
@@ -356,7 +388,6 @@ with DAG(
     start = EmptyOperator(task_id="start")
     end = EmptyOperator(task_id="end")
 
-    # 1) basic dicts
     with TaskGroup(group_id="dicts_basic_incremental") as g_basic:
         t13 = PythonOperator(
             task_id="load_dict13",
@@ -381,7 +412,6 @@ with DAG(
 
         t13 >> t14 >> t15 >> t59
 
-    # 2) dict3 + dict4
     with TaskGroup(group_id="dict3_4_incremental") as g_34:
         t3 = PythonOperator(
             task_id="load_dict3",
@@ -396,7 +426,6 @@ with DAG(
 
         t3 >> t4
 
-    # 3) dict31 + dict32
     with TaskGroup(group_id="dict31_32_incremental") as g_3132:
         t31 = PythonOperator(
             task_id="load_dict31",
@@ -411,7 +440,6 @@ with DAG(
 
         t31 >> t32
 
-    # 4) dict90 + dict91
     with TaskGroup(group_id="dict90_91_incremental") as g_9091:
         t90 = PythonOperator(
             task_id="load_dict90",
