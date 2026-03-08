@@ -1,5 +1,5 @@
 import os
-###final update5
+###final update6
 import time
 import re
 import calendar
@@ -414,63 +414,129 @@ def build_dict31_flat_from_stage():
 
 def build_dict3_flat_from_stage():
     ch_db, ch = _ch_client()
+    print(f"=== BUILD {ch_db}.dict3_flat FROM STAGE VIEWS ===")
 
-    print(f"=== BUILD `{ch_db}`.`dict3_flat` FROM STAGE VIEWS ===")
-    ch.command(f"TRUNCATE TABLE `{ch_db}`.`dict3_flat`")
+    ch.command(f"TRUNCATE TABLE {ch_db}.dict3_flat")
 
-    debug_sql = f"""
+    sql = f"""
+    INSERT INTO {ch_db}.dict3_flat (
+        d3_rid,
+        d3_changed,
+        d3_user,
+        d3_enabled,
+        d3_orgname,
+        d3_orgtype,
+        d3_orgdate,
+        d3_country,
+        d3_town,
+        d3_address,
+        d3_address2,
+        d3_phone,
+        d3_email,
+        d3_site,
+        d3_bankinfo,
+        d3_member,
+        d3_iik,
+        d3_bik,
+        d3_bin,
+        d3_kbe,
+        d4_rid,
+        d4_changed,
+        d4_user,
+        d4_enabled,
+        d4_bindrid,
+        d4_commission,
+        d4_guarantee,
+        d4_guarantee_num,
+        d4_guarantee_date,
+        d4_chieffname,
+        d4_agreement,
+        d4_created,
+        d4_status,
+        d4_about,
+        d4_tourfirmname,
+        d4_filials,
+        d4_licence,
+        d4_founders,
+        d4_insurance,
+        d4_offices,
+        d4_cellphone,
+        d4_bad_past_tour,
+        d4_create_past_tour,
+        d4_no_create_tour,
+        d4_allow_auto_tour,
+        d4_list,
+        d4_is_agent,
+        d4_remarks,
+        d4_auto_bad_tour,
+        d4_hajj,
+        d4_description
+    )
     SELECT
         t.rid AS d3_rid,
+        t.changed AS d3_changed,
+        t.user AS d3_user,
+        t.enabled AS d3_enabled,
+        t.orgname AS d3_orgname,
+        t.orgtype AS d3_orgtype,
+        ifNull(CAST(t.orgdate AS Nullable(Date)), toDate('1970-01-01')) AS d3_orgdate,
+        t.country AS d3_country,
+        t.town AS d3_town,
+        t.address AS d3_address,
+        t.address2 AS d3_address2,
+        t.phone AS d3_phone,
+        t.email AS d3_email,
+        t.site AS d3_site,
+        t.bankinfo AS d3_bankinfo,
+        t.member AS d3_member,
+        t.iik AS d3_iik,
+        t.bik AS d3_bik,
+        t.bin AS d3_bin,
+        t.kbe AS d3_kbe,
         t2.rid AS d4_rid,
+        t2.changed AS d4_changed,
+        t2.user AS d4_user,
+        t2.enabled AS d4_enabled,
         t2.bindrid AS d4_bindrid,
-        t2.guarantee_date AS raw_guarantee_date,
-        toTypeName(t2.guarantee_date) AS raw_guarantee_date_type,
-        toString(t2.guarantee_date) AS raw_guarantee_date_str,
-        t2.created AS raw_created,
-        toTypeName(t2.created) AS raw_created_type,
-        toString(t2.created) AS raw_created_str,
-        t2.hajj AS raw_hajj,
-        toTypeName(t2.hajj) AS raw_hajj_type,
-        toString(t2.hajj) AS raw_hajj_str
-    FROM `{ch_db}`.`dict3_stage` t
-    LEFT JOIN `{ch_db}`.`dict4_stage` t2
+        t2.commission AS d4_commission,
+        t2.guarantee AS d4_guarantee,
+        t2.guarantee_num AS d4_guarantee_num,
+        ifNull(CAST(t2.guarantee_date AS Nullable(Date)), toDate('1970-01-01')) AS d4_guarantee_date,
+        t2.chieffname AS d4_chieffname,
+        t2.agreement AS d4_agreement,
+        CAST(t2.created AS Nullable(Date)) AS d4_created,
+        t2.status AS d4_status,
+        t2.about AS d4_about,
+        t2.tourfirmname AS d4_tourfirmname,
+        t2.filials AS d4_filials,
+        t2.licence AS d4_licence,
+        t2.founders AS d4_founders,
+        t2.insurance AS d4_insurance,
+        t2.offices AS d4_offices,
+        t2.cellphone AS d4_cellphone,
+        t2.bad_past_tour AS d4_bad_past_tour,
+        t2.create_past_tour AS d4_create_past_tour,
+        t2.no_create_tour AS d4_no_create_tour,
+        t2.allow_auto_tour AS d4_allow_auto_tour,
+        t2.list AS d4_list,
+        t2.is_agent AS d4_is_agent,
+        t2.remarks AS d4_remarks,
+        t2.auto_bad_tour AS d4_auto_bad_tour,
+        ifNull(CAST(t2.hajj AS Nullable(Date)), toDate('1970-01-01')) AS d4_hajj,
+        t2.description AS d4_description
+    FROM {ch_db}.dict3_stage t
+    LEFT JOIN {ch_db}.dict4_stage t2
         ON t.rid = t2.bindrid
-    WHERE
-        t2.guarantee_date IS NULL
-        OR toString(t2.guarantee_date) = ''
-        OR toString(t2.guarantee_date) = '0000-00-00'
-        OR toString(t2.guarantee_date) = '0000-00-00 00:00:00'
-    LIMIT 100
     """
 
-    print("===== DEBUG guarantee_date SQL START =====")
-    print(debug_sql)
-    print("===== DEBUG guarantee_date SQL END =====")
+    print("===== SQL START =====")
+    print(sql)
+    print("===== SQL END =====")
 
-    debug_res = ch.query(debug_sql)
+    ch.command(sql)
 
-    print("===== DEBUG guarantee_date ROWS START =====")
-    print(f"rows_found = {len(debug_res.result_rows)}")
-    for i, row in enumerate(debug_res.result_rows, 1):
-        print(f"row_{i} = {row}")
-    print("===== DEBUG guarantee_date ROWS END =====")
-
-    debug_cnt_sql = f"""
-    SELECT count()
-    FROM `{ch_db}`.`dict3_stage` t
-    LEFT JOIN `{ch_db}`.`dict4_stage` t2
-        ON t.rid = t2.bindrid
-    WHERE
-        t2.guarantee_date IS NULL
-        OR toString(t2.guarantee_date) = ''
-        OR toString(t2.guarantee_date) = '0000-00-00'
-        OR toString(t2.guarantee_date) = '0000-00-00 00:00:00'
-    """
-    debug_cnt = ch.query(debug_cnt_sql).result_rows[0][0]
-    print(f"problematic guarantee_date rows count = {debug_cnt}")
-
-    raise ValueError("DEBUG STOP: printed problematic rows for guarantee_date")
-
+    cnt = ch.query(f"SELECT count() FROM {ch_db}.dict3_flat").result_rows[0][0]
+    print(f"=== DONE BUILD dict3_flat | rows={cnt} ===")
 
 def build_dict90_flat_from_stage():
     ch_db, ch = _ch_client()
