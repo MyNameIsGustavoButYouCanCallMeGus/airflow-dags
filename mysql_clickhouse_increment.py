@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from zoneinfo import ZoneInfo
 from datetime import datetime, date, time as dtime, timedelta
 
 import pymysql
@@ -21,6 +22,12 @@ CH_DB = None
 
 OVERLAP_MINUTES = 5
 DEBUG_SAMPLE_ROWS = 20
+
+MYSQL_TZ = "Asia/Almaty"
+TARGET_TZ = "UTC"
+
+FALLBACK_DATE = date(1970, 1, 1)
+FALLBACK_DATETIME = datetime(1970, 1, 1, 0, 0, 0)
 
 
 ZERO_DATE_STRINGS = {
@@ -180,42 +187,79 @@ def _to_dt(x):
     return None
 
 
+def _local_kz_to_utc(dt_value: datetime | None) -> datetime | None:
+    if dt_value is None:
+        return None
+
+    if dt_value.tzinfo is None:
+        dt_value = dt_value.replace(tzinfo=ZoneInfo(MYSQL_TZ))
+
+    return dt_value.astimezone(ZoneInfo(TARGET_TZ)).replace(tzinfo=None)
+
+
 # =========================
 # CLICKHOUSE SCHEMA HELPERS
 # =========================
-def _get_ch_column_types(ch_client, raw_table: str) -> dict[str, str]:
+def _get_ch_column_meta(ch_client, raw_table: str) -> dict[str, dict]:
     """
     Returns:
     {
-        "rid": "UInt64",
-        "orgdate": "Date",
-        "changed": "DateTime",
-        ...
+        "changed": {
+            "raw_type": "DateTime",
+            "base_type": "DateTime",
+            "nullable": False,
+        },
+        "orgdate": {
+            "raw_type": "Nullable(Date)",
+            "base_type": "Date",
+            "nullable": True,
+        }
     }
     """
     res = ch_client.query(f"DESCRIBE TABLE {raw_table}")
     out = {}
+
     for row in res.result_rows:
         col_name = row[0]
-        col_type = row[1]
-        out[col_name] = _unwrap_ch_type(col_type)
+        raw_type = row[1]
+        is_nullable = raw_type.strip().startswith("Nullable(")
+        base_type = _unwrap_ch_type(raw_type)
+
+        out[col_name] = {
+            "raw_type": raw_type,
+            "base_type": base_type,
+            "nullable": is_nullable,
+        }
+
     return out
 
 
-def _normalize_rows_by_ch_schema(rows, ch_col_types: dict[str, str]):
+def _normalize_rows_by_ch_schema(rows, ch_col_meta: dict[str, dict]):
     fixed_rows = []
 
     for row in rows:
         fixed = dict(row)
 
-        for col, ch_type in ch_col_types.items():
+        for col, meta in ch_col_meta.items():
             if col not in fixed:
                 continue
 
-            if ch_type == "Date":
-                fixed[col] = _to_date(fixed[col])
-            elif ch_type.startswith("DateTime"):
-                fixed[col] = _to_dt(fixed[col])
+            base_type = meta["base_type"]
+            nullable = meta["nullable"]
+
+            if base_type == "Date":
+                val = _to_date(fixed[col])
+                if val is None and not nullable:
+                    val = FALLBACK_DATE
+                fixed[col] = val
+
+            elif base_type.startswith("DateTime"):
+                val = _to_dt(fixed[col])
+                val = _local_kz_to_utc(val)
+                if val is None and not nullable:
+                    val = FALLBACK_DATETIME
+                fixed[col] = val
+
             else:
                 fixed[col] = _decode_if_bytes(fixed[col])
 
@@ -224,10 +268,10 @@ def _normalize_rows_by_ch_schema(rows, ch_col_types: dict[str, str]):
     return fixed_rows
 
 
-def _debug_temporal_columns(rows, ch_col_types: dict[str, str]):
+def _debug_temporal_columns(rows, ch_col_meta: dict[str, dict]):
     temporal_cols = [
-        col for col, t in ch_col_types.items()
-        if t == "Date" or t.startswith("DateTime")
+        col for col, meta in ch_col_meta.items()
+        if meta["base_type"] == "Date" or meta["base_type"].startswith("DateTime")
     ]
 
     if not rows or not temporal_cols:
@@ -280,8 +324,8 @@ def incremental_load_table(table_name: str, raw_table: str):
     print(f"Watermark: {last_changed}")
     print(f"Overlap watermark: {last_changed_with_overlap}")
 
-    ch_col_types = _get_ch_column_types(ch_client, raw_table)
-    print(f"ClickHouse schema for {raw_table}: {ch_col_types}")
+    ch_col_meta = _get_ch_column_meta(ch_client, raw_table)
+    print(f"ClickHouse schema for {raw_table}: {ch_col_meta}")
 
     _, mysql = _mysql_conn()
 
@@ -305,11 +349,10 @@ def incremental_load_table(table_name: str, raw_table: str):
             print(f"No new rows for {table_name}")
             return
 
-        rows = _normalize_rows_by_ch_schema(rows, ch_col_types)
-        _debug_temporal_columns(rows, ch_col_types)
+        rows = _normalize_rows_by_ch_schema(rows, ch_col_meta)
+        _debug_temporal_columns(rows, ch_col_meta)
 
-        # берем колонки в порядке ClickHouse raw table
-        columns = [col for col in ch_col_types.keys() if col in rows[0]]
+        columns = [col for col in ch_col_meta.keys() if col in rows[0]]
         data = [[row.get(col) for col in columns] for row in rows]
 
         ch_client.insert(
