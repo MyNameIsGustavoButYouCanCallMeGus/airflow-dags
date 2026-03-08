@@ -1,5 +1,5 @@
 import os
-###final update
+###final update2
 import time
 import re
 import calendar
@@ -477,6 +477,9 @@ def build_dict3_flat_from_stage():
         ON t.rid = t2.bindrid
     """
 
+    print("===== SQL START =====")
+    print(sql)
+    print("===== SQL END =====")
     t0 = time.time()
     ch.command(sql)
     cnt = ch.query(f"SELECT count() FROM `{ch_db}`.`dict3_flat`").result_rows[0][0]
