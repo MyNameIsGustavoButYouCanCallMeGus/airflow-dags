@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 import re
-from zoneinfo import ZoneInfo
 from datetime import datetime, date, time as dtime, timedelta
 
 import pymysql
@@ -13,7 +10,6 @@ from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.utils.task_group import TaskGroup
 
-
 MYSQL_CONN_ID = "tourservice_mysql"
 CH_CONN_ID = "clickhouse"
 
@@ -22,13 +18,6 @@ CH_DB = None
 
 OVERLAP_MINUTES = 5
 DEBUG_SAMPLE_ROWS = 20
-
-MYSQL_TZ = "Asia/Almaty"
-TARGET_TZ = "UTC"
-
-FALLBACK_DATE = date(1970, 1, 1)
-FALLBACK_DATETIME = datetime(1970, 1, 1, 0, 0, 0)
-
 
 ZERO_DATE_STRINGS = {
     "0000-00-00",
@@ -93,25 +82,21 @@ def _unwrap_ch_type(ch_type: str) -> str:
     Nullable(LowCardinality(Date)) -> Date
     """
     t = ch_type.strip()
-
     while True:
         m = re.match(r"^(Nullable|LowCardinality)\((.*)\)$", t)
         if not m:
             break
         t = m.group(2).strip()
-
     return t
 
 
 def _to_date(x):
     if x is None:
         return None
-
     x = _decode_if_bytes(x)
 
     if isinstance(x, date) and not isinstance(x, datetime):
         return x
-
     if isinstance(x, datetime):
         return x.date()
 
@@ -148,12 +133,10 @@ def _to_date(x):
 def _to_dt(x):
     if x is None:
         return None
-
     x = _decode_if_bytes(x)
 
     if isinstance(x, datetime):
         return x
-
     if isinstance(x, date):
         return datetime.combine(x, dtime.min)
 
@@ -187,93 +170,47 @@ def _to_dt(x):
     return None
 
 
-def _local_kz_to_utc(dt_value: datetime | None) -> datetime | None:
-    if dt_value is None:
-        return None
-
-    if dt_value.tzinfo is None:
-        dt_value = dt_value.replace(tzinfo=ZoneInfo(MYSQL_TZ))
-
-    return dt_value.astimezone(ZoneInfo(TARGET_TZ)).replace(tzinfo=None)
-
-
 # =========================
 # CLICKHOUSE SCHEMA HELPERS
 # =========================
-def _get_ch_column_meta(ch_client, raw_table: str) -> dict[str, dict]:
+def _get_ch_column_types(ch_client, raw_table: str) -> dict[str, str]:
     """
     Returns:
-    {
-        "changed": {
-            "raw_type": "DateTime",
-            "base_type": "DateTime",
-            "nullable": False,
-        },
-        "orgdate": {
-            "raw_type": "Nullable(Date)",
-            "base_type": "Date",
-            "nullable": True,
-        }
-    }
+    { "rid": "UInt64", "orgdate": "Date", "changed": "DateTime", ... }
     """
     res = ch_client.query(f"DESCRIBE TABLE {raw_table}")
     out = {}
-
     for row in res.result_rows:
         col_name = row[0]
-        raw_type = row[1]
-        is_nullable = raw_type.strip().startswith("Nullable(")
-        base_type = _unwrap_ch_type(raw_type)
-
-        out[col_name] = {
-            "raw_type": raw_type,
-            "base_type": base_type,
-            "nullable": is_nullable,
-        }
-
+        col_type = row[1]
+        out[col_name] = _unwrap_ch_type(col_type)
     return out
 
 
-def _normalize_rows_by_ch_schema(rows, ch_col_meta: dict[str, dict]):
+def _normalize_rows_by_ch_schema(rows, ch_col_types: dict[str, str]):
     fixed_rows = []
-
     for row in rows:
         fixed = dict(row)
-
-        for col, meta in ch_col_meta.items():
+        for col, ch_type in ch_col_types.items():
             if col not in fixed:
                 continue
 
-            base_type = meta["base_type"]
-            nullable = meta["nullable"]
-
-            if base_type == "Date":
-                val = _to_date(fixed[col])
-                if val is None and not nullable:
-                    val = FALLBACK_DATE
-                fixed[col] = val
-
-            elif base_type.startswith("DateTime"):
-                val = _to_dt(fixed[col])
-                val = _local_kz_to_utc(val)
-                if val is None and not nullable:
-                    val = FALLBACK_DATETIME
-                fixed[col] = val
-
+            if ch_type == "Date":
+                fixed[col] = _to_date(fixed[col])
+            elif ch_type.startswith("DateTime"):
+                fixed[col] = _to_dt(fixed[col])
             else:
                 fixed[col] = _decode_if_bytes(fixed[col])
 
         fixed_rows.append(fixed)
-
     return fixed_rows
 
 
-def _debug_temporal_columns(rows, ch_col_meta: dict[str, dict]):
+def _debug_temporal_columns(rows, ch_col_types: dict[str, str]):
     temporal_cols = [
-        col for col, meta in ch_col_meta.items()
-        if meta["base_type"] == "Date" or meta["base_type"].startswith("DateTime")
+        col for col, t in ch_col_types.items()
+        if t == "Date" or t.startswith("DateTime")
     ]
-
     if not rows or not temporal_cols:
         return
 
@@ -296,10 +233,8 @@ def _get_watermark(ch_client, table_name: str):
         LIMIT 1
     """
     wm_res = ch_client.query(wm_sql)
-
     if not wm_res.result_rows:
         raise ValueError(f"Watermark for table {table_name} not found in etl_watermarks")
-
     return wm_res.result_rows[0][0]
 
 
@@ -317,18 +252,16 @@ def incremental_load_table(table_name: str, raw_table: str):
     print(f"=== START incremental load: {table_name} -> {raw_table} ===")
 
     _, ch_client = _ch_client()
-
     last_changed = _get_watermark(ch_client, table_name)
     last_changed_with_overlap = last_changed - timedelta(minutes=OVERLAP_MINUTES)
 
     print(f"Watermark: {last_changed}")
     print(f"Overlap watermark: {last_changed_with_overlap}")
 
-    ch_col_meta = _get_ch_column_meta(ch_client, raw_table)
-    print(f"ClickHouse schema for {raw_table}: {ch_col_meta}")
+    ch_col_types = _get_ch_column_types(ch_client, raw_table)
+    print(f"ClickHouse schema for {raw_table}: {ch_col_types}")
 
     _, mysql = _mysql_conn()
-
     try:
         with mysql.cursor() as cursor:
             query = f"""
@@ -340,45 +273,44 @@ def incremental_load_table(table_name: str, raw_table: str):
             cursor.execute(query, (last_changed_with_overlap,))
             rows = cursor.fetchall()
 
-        print(f"Fetched {len(rows)} rows from MySQL for {table_name}")
+            print(f"Fetched {len(rows)} rows from MySQL for {table_name}")
+            for r in rows[:DEBUG_SAMPLE_ROWS]:
+                print(r)
 
-        for r in rows[:DEBUG_SAMPLE_ROWS]:
-            print(r)
+            if not rows:
+                print(f"No new rows for {table_name}")
+                return
 
-        if not rows:
-            print(f"No new rows for {table_name}")
-            return
+            rows = _normalize_rows_by_ch_schema(rows, ch_col_types)
+            _debug_temporal_columns(rows, ch_col_types)
 
-        rows = _normalize_rows_by_ch_schema(rows, ch_col_meta)
-        _debug_temporal_columns(rows, ch_col_meta)
+            # берем колонки в порядке ClickHouse raw table
+            columns = [col for col in ch_col_types.keys() if col in rows[0]]
+            data = [[row.get(col) for col in columns] for row in rows]
 
-        columns = [col for col in ch_col_meta.keys() if col in rows[0]]
-        data = [[row.get(col) for col in columns] for row in rows]
-
-        ch_client.insert(
-            table=raw_table,
-            data=data,
-            column_names=columns,
-        )
-
-        changed_values = [row.get("changed") for row in rows if row.get("changed") is not None]
-        if not changed_values:
-            raise ValueError(f"No valid changed values after normalization for table {table_name}")
-
-        max_changed = max(changed_values)
-
-        if max_changed > last_changed:
-            _insert_watermark(ch_client, table_name, max_changed)
-            print(
-                f"Loaded {len(rows)} rows into {raw_table}. "
-                f"Watermark updated to {max_changed:%Y-%m-%d %H:%M:%S}"
-            )
-        else:
-            print(
-                f"Loaded {len(rows)} overlap rows into {raw_table}. "
-                f"Watermark not changed: {last_changed:%Y-%m-%d %H:%M:%S}"
+            ch_client.insert(
+                table=raw_table,
+                data=data,
+                column_names=columns,
             )
 
+            changed_values = [row.get("changed") for row in rows if row.get("changed") is not None]
+            if not changed_values:
+                raise ValueError(f"No valid changed values after normalization for table {table_name}")
+
+            max_changed = max(changed_values)
+
+            if max_changed > last_changed:
+                _insert_watermark(ch_client, table_name, max_changed)
+                print(
+                    f"Loaded {len(rows)} rows into {raw_table}. "
+                    f"Watermark updated to {max_changed:%Y-%m-%d %H:%M:%S}"
+                )
+            else:
+                print(
+                    f"Loaded {len(rows)} overlap rows into {raw_table}. "
+                    f"Watermark not changed: {last_changed:%Y-%m-%d %H:%M:%S}"
+                )
     finally:
         mysql.close()
 
