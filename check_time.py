@@ -54,8 +54,9 @@ def check_timezones():
         print("MySQL session timezone:", cursor.fetchone())
         
         cursor.execute("""
+            select * from dict32 where changed = (
             SELECT MAX(changed) AS max_changed_dict32
-            FROM dict32
+            FROM dict32)
         """)
         print("MySQL dict32 MAX(changed):", cursor.fetchone())
 
