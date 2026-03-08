@@ -136,9 +136,10 @@ def _to_dt(x):
     x = _decode_if_bytes(x)
 
     if isinstance(x, datetime):
-        return x
+        return x.strftime("%Y-%m-%d %H:%M:%S")
+
     if isinstance(x, date):
-        return datetime.combine(x, dtime.min)
+        return datetime.combine(x, dtime.min).strftime("%Y-%m-%d %H:%M:%S")
 
     if isinstance(x, str):
         s = x.strip()
@@ -149,19 +150,20 @@ def _to_dt(x):
 
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
             try:
-                return datetime.strptime(s[:26], fmt)
+                return datetime.strptime(s[:26], fmt).strftime("%Y-%m-%d %H:%M:%S")
             except ValueError:
                 pass
 
         for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
             try:
-                return datetime.strptime(s[:26], fmt)
+                return datetime.strptime(s[:26], fmt).strftime("%Y-%m-%d %H:%M:%S")
             except ValueError:
                 pass
 
         for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
             try:
-                return datetime.combine(datetime.strptime(s[:10], fmt).date(), dtime.min)
+                d = datetime.strptime(s[:10], fmt).date()
+                return datetime.combine(d, dtime.min).strftime("%Y-%m-%d %H:%M:%S")
             except ValueError:
                 pass
 
