@@ -876,7 +876,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="mysql_clickhouse_increment_stage_flat_dashboards",
+    dag_id="mysql_clickhouse_increment_stage_flat_dashboards_self_trigger",
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
