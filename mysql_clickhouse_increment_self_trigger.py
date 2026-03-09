@@ -1,5 +1,5 @@
 import os
-###final update6
+###final update8
 import time
 import re
 import calendar
@@ -891,7 +891,7 @@ with DAG(
 
     trigger_self = TriggerDagRunOperator(
         task_id="trigger_self",
-        trigger_dag_id="mysql_clickhouse_increment_stage_flat_dashboards",
+        trigger_dag_id="mysql_clickhouse_increment_stage_flat_dashboards_self_trigger",
     )
 
     # =========================
