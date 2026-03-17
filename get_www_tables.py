@@ -602,7 +602,7 @@ def build_dict90_flat_from_stage():
 def _dashboard_inserts(ch_db: str):
     d1  = f"`{ch_db}`, `t_so_dashboard_1`"
     d2  = f"`{ch_db}`.`t_so_dashboard_2`"
-    d3  = f"`{ch_db}`.`t_so_dashboard_7`"
+    d3  = f"`{ch_db}`.`t_so_dashboard_3`"
     d4  = f"`{ch_db}`.`t_so_dashboard_5`"
     d5  = f"`{ch_db}`,`t_so_dashboard_13`"
     d6  = f"`{ch_db}`.`t_so_dashboard_19`"
@@ -735,26 +735,27 @@ def _dashboard_inserts(ch_db: str):
     sql_3 = f"""
     insert into {d3}
     select
-            t3.created                  as created,
-            toYear(t3.created)          as year,
-            toMonth(t3.created)         as month,
-            t2.d32_qid                  as qid,
-            t.d3_orgname                as orgname,
-            t3.airport_start            as airport,
-            t5.town                     as city,
-            t7.country                  as country
+    	    t3.created    	    	    as created,
+    	    toYear(t3.created)			as year,
+    	    toMonth(t3.created)			as month,
+    	    t2.d32_qid 					as qid,
+    		t.d3_orgname				as orgname,
+    		t3.airport_start			as airport,
+    		t5.town						as city,
+    		t7.country					as country 
     from {dict3_flat} t
-    join {dict31_flat} t2       on t.d4_rid = t2.d31_operatorid
-    left join {dict90_flat} t3  on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
-    left join {dict59_stage} t4 on t4.iata = t3.airport_start
-    left join {dict15_stage} t5 on t5.rid = t4.bindrid
-    left join {dict14_stage} t6 on t6.rid = t5.bindrid
-    left join {dict13_stage} t7 on t7.rid = t6.bindrid
+    join {dict31_flat} t2 	 	   on t.d4_rid=t2.d31_operatorid
+    left join {dict90_flat} t3     on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
+    left join {dict59_stage} t4    on t4.iata = t3.airport_start
+    left join {dict15_stage} t5    on t5.rid = t4.bindrid
+    left join {dict14_stage} t6    on t6.rid = t5.bindrid
+    left join {dict13_stage} t7    on t7.rid = t6.bindrid
     where 1=1
-      and t2.d32_enabled = 1
-      and t2.d32_mode = 0
-      and t2.d32_qid > 0
-      and toYear(t3.created) != 1970
+      and t2.d32_enabled=1
+      and t2.d32_mode=0
+      and t2.d32_qid>0
+      and toYear(t3.created)!=1970
+    order by t3.created desc
     """
 
     sql_4 = f"""
@@ -1215,7 +1216,7 @@ def _dashboard_inserts(ch_db: str):
     return {
         "t_so_dashboard_1",  sql_1,
         "t_so_dashboard_2":  sql_2,
-        "t_so_dashboard_7":  sql_3,
+        "t_so_dashboard_3":  sql_3,
         "t_so_dashboard_5":  sql_4,
         "t_so_dashboard_13": sql_5,
         "t_so_dashboard_19": sql_6,
@@ -1223,8 +1224,8 @@ def _dashboard_inserts(ch_db: str):
         "t_so_dashboard_11": sql_10,
         "t_so_dashboard_12": sql_11,
         "t_so_dashboard_7":  sql_12,
-        "t_so_dashboard_19":  sql_13,
-        "t_so_dashboard_19":  sql_14
+        "t_so_dashboard_19": sql_13,
+        "t_so_dashboard_19": sql_14
     }
 
 def refresh_one_dashboard(table: str):
