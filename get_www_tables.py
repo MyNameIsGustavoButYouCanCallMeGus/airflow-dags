@@ -605,7 +605,7 @@ def _dashboard_inserts(ch_db: str):
     d3  = f"`{ch_db}`.`t_so_dashboard_3`"
     d4  = f"`{ch_db}`.`t_so_dashboard_4`"
     d5  = f"`{ch_db}`,`t_so_dashboard_5`"
-    d6  = f"`{ch_db}`.`t_so_dashboard_19`"
+    d6  = f"`{ch_db}`.`t_so_dashboard_6`"
     d9  = f"`{ch_db}`,`t_so_dashboard_3`"
     d10 = f"`{ch_db}`.`t_so_dashboard_11`"
     d11 = f"`{ch_db}`.`t_so_dashboard_12`"
@@ -888,8 +888,6 @@ def _dashboard_inserts(ch_db: str):
         op.operator_name
     """
 
-
-    
     sql_6 = f"""
     insert into {d6}
     select
@@ -1219,7 +1217,7 @@ def _dashboard_inserts(ch_db: str):
         "t_so_dashboard_3":  sql_3,
         "t_so_dashboard_4":  sql_4,
         "t_so_dashboard_5":  sql_5,
-        "t_so_dashboard_19": sql_6,
+        "t_so_dashboard_6": sql_6,
         "t_so_dashboard_3":  sql_9,
         "t_so_dashboard_11": sql_10,
         "t_so_dashboard_12": sql_11,
