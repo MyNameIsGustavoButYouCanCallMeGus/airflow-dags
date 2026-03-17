@@ -184,7 +184,7 @@ def _to_ch_datetime_int(x):
 # CLICKHOUSE SCHEMA HELPERS
 # =========================
 def _get_ch_column_types(ch_client, raw_table: str) -> dict[str, str]:
-    res = ch_client.query(f"DESCRIBE TABLE {raw_table}")
+    res = ch_client.query(f"describe table {raw_table}")
     out = {}
     for row in res.result_rows:
         col_name = row[0]
@@ -234,11 +234,13 @@ def _debug_temporal_columns(rows, ch_col_types: dict[str, str], label: str = "")
 # =========================
 def _get_watermark(ch_client, table_name: str):
     wm_sql = f"""
-        SELECT last_changed
-        FROM etl_watermarks
-        WHERE table_name = '{table_name}'
-        ORDER BY updated_at DESC
-        LIMIT 1
+        select 
+                t.last_changed
+        from etl_watermarks t
+        where 1=1
+          and t.table_name = '{table_name}'
+        order by t.updated_at desc
+        limit 1
     """
     wm_res = ch_client.query(wm_sql)
     if not wm_res.result_rows:
@@ -253,8 +255,8 @@ def _get_watermark(ch_client, table_name: str):
 
 def _insert_watermark(ch_client, table_name: str, max_changed: datetime):
     ch_client.command(f"""
-        INSERT INTO etl_watermarks (table_name, last_changed)
-        VALUES ('{table_name}', toDateTime('{max_changed:%Y-%m-%d %H:%M:%S}'))
+        insert into etl_watermarks (table_name, last_changed)
+        values ('{table_name}', toDateTime('{max_changed:%Y-%m-%d %H:%M:%S}'))
     """)
 
 
@@ -283,10 +285,13 @@ def incremental_load_table(table_name: str, raw_table: str):
     try:
         with mysql.cursor() as cursor:
             query = f"""
-                SELECT *
-                FROM {table_name}
-                WHERE changed >= %s
-                ORDER BY changed, rid
+                select 
+                        t.*
+                from {table_name} t
+                where 1=1
+                  and t.changed >= %s
+                order by t.changed, 
+                         t.rid
             """
             cursor.execute(query, (last_changed_with_overlap,))
 
@@ -371,40 +376,39 @@ def build_dict31_flat_from_stage():
     ch.command(f"TRUNCATE TABLE `{ch_db}`.`dict31_flat`")
 
     sql = f"""
-    INSERT INTO `{ch_db}`.`dict31_flat`
-    SELECT
-        t.rid               AS d31_rid,
-        t.changed           AS d31_changed,
-        t.user              AS d31_user,
-        t.enabled           AS d31_enabled,
-        t.name              AS d31_name,
-        t.type              AS d31_type,
-        t.currency          AS d31_currency,
-        t.operatorid        AS d31_operatorid,
-        t.bik               AS d31_bik,
-        t.bank              AS d31_bank,
-        t.about             AS d31_about,
-        t.filialid          AS d31_filialid,
-        t.balance           AS d31_balance,
-        t.transactions      AS d31_transactions,
-        t.bin               AS d31_bin,
-        t2.rid              AS d32_rid,
-        t2.changed          AS d32_changed,
-        t2.user             AS d32_user,
-        t2.enabled          AS d32_enabled,
-        t2.bindrid          AS d32_bindrid,
-        t2.money            AS d32_money,
-        t2.mode             AS d32_mode,
-        t2.qid              AS d32_qid,
-        t2.docid            AS d32_docid,
-        t2.doctemplateid    AS d32_doctemplateid,
-        t2.userid           AS d32_userid,
-        t2.datetime         AS d32_datetime,
-        t2.first_datetime   AS d32_first_datetime,
-        t2.msg              AS d32_msg
-    FROM `{ch_db}`.`dict31_stage` t
-    LEFT JOIN `{ch_db}`.`dict32_stage` t2
-        ON t.rid = t2.bindrid
+    insert into `{ch_db}`.`dict31_flat`
+    select
+            t.rid               as d31_rid,
+            t.changed           as d31_changed,
+            t.user              as d31_user,
+            t.enabled           as d31_enabled,
+            t.name              as d31_name,
+            t.type              as d31_type,
+            t.currency          as d31_currency,
+            t.operatorid        as d31_operatorid,
+            t.bik               as d31_bik,
+            t.bank              as d31_bank,
+            t.about             as d31_about,
+            t.filialid          as d31_filialid,
+            t.balance           as d31_balance,
+            t.transactions      as d31_transactions,
+            t.bin               as d31_bin,
+            t2.rid              as d32_rid,
+            t2.changed          as d32_changed,
+            t2.user             as d32_user,
+            t2.enabled          as d32_enabled,
+            t2.bindrid          as d32_bindrid,
+            t2.money            as d32_money,
+            t2.mode             as d32_mode,
+            t2.qid              as d32_qid,
+            t2.docid            as d32_docid,
+            t2.doctemplateid    as d32_doctemplateid,
+            t2.userid           as d32_userid,
+            t2.datetime         as d32_datetime,
+            t2.first_datetime   as d32_first_datetime,
+            t2.msg              as d32_msg
+    from `{ch_db}`.`dict31_stage` t
+    left join `{ch_db}`.`dict32_stage` t2 on t.rid = t2.bindrid
     """
 
     t0 = time.time()
@@ -420,7 +424,7 @@ def build_dict3_flat_from_stage():
     ch.command(f"TRUNCATE TABLE {ch_db}.dict3_flat")
 
     sql = f"""
-    INSERT INTO {ch_db}.dict3_flat (
+    insert into {ch_db}.dict3_flat (
         d3_rid,
         d3_changed,
         d3_user,
@@ -473,61 +477,60 @@ def build_dict3_flat_from_stage():
         d4_hajj,
         d4_description
     )
-    SELECT
-        t.rid AS d3_rid,
-        t.changed AS d3_changed,
-        t.user AS d3_user,
-        t.enabled AS d3_enabled,
-        t.orgname AS d3_orgname,
-        t.orgtype AS d3_orgtype,
-        ifNull(CAST(t.orgdate AS Nullable(Date)), toDate('1970-01-01')) AS d3_orgdate,
-        t.country AS d3_country,
-        t.town AS d3_town,
-        t.address AS d3_address,
-        t.address2 AS d3_address2,
-        t.phone AS d3_phone,
-        t.email AS d3_email,
-        t.site AS d3_site,
-        t.bankinfo AS d3_bankinfo,
-        t.member AS d3_member,
-        t.iik AS d3_iik,
-        t.bik AS d3_bik,
-        t.bin AS d3_bin,
-        t.kbe AS d3_kbe,
-        t2.rid AS d4_rid,
-        t2.changed AS d4_changed,
-        t2.user AS d4_user,
-        t2.enabled AS d4_enabled,
-        t2.bindrid AS d4_bindrid,
-        t2.commission AS d4_commission,
-        t2.guarantee AS d4_guarantee,
-        t2.guarantee_num AS d4_guarantee_num,
-        ifNull(CAST(t2.guarantee_date AS Nullable(Date)), toDate('1970-01-01')) AS d4_guarantee_date,
-        t2.chieffname AS d4_chieffname,
-        t2.agreement AS d4_agreement,
-        CAST(t2.created AS Nullable(Date)) AS d4_created,
-        t2.status AS d4_status,
-        t2.about AS d4_about,
-        t2.tourfirmname AS d4_tourfirmname,
-        t2.filials AS d4_filials,
-        t2.licence AS d4_licence,
-        t2.founders AS d4_founders,
-        t2.insurance AS d4_insurance,
-        t2.offices AS d4_offices,
-        t2.cellphone AS d4_cellphone,
-        t2.bad_past_tour AS d4_bad_past_tour,
-        t2.create_past_tour AS d4_create_past_tour,
-        t2.no_create_tour AS d4_no_create_tour,
-        t2.allow_auto_tour AS d4_allow_auto_tour,
-        t2.list AS d4_list,
-        t2.is_agent AS d4_is_agent,
-        t2.remarks AS d4_remarks,
-        t2.auto_bad_tour AS d4_auto_bad_tour,
-        ifNull(CAST(t2.hajj AS Nullable(Date)), toDate('1970-01-01')) AS d4_hajj,
-        t2.description AS d4_description
-    FROM {ch_db}.dict3_stage t
-    LEFT JOIN {ch_db}.dict4_stage t2
-        ON t.rid = t2.bindrid
+    select
+            t.rid                                                                       as d3_rid,
+            t.changed                                                                   as d3_changed,
+            t.user                                                                      as d3_user,
+            t.enabled                                                                   as d3_enabled,
+            t.orgname                                                                   as d3_orgname,
+            t.orgtype                                                                   as d3_orgtype,
+            ifNull(CasT(t.orgdate as Nullable(Date)), toDate('1970-01-01'))             as d3_orgdate,
+            t.country                                                                   as d3_country,
+            t.town                                                                      as d3_town,
+            t.address                                                                   as d3_address,
+            t.address2                                                                  as d3_address2,
+            t.phone                                                                     as d3_phone,
+            t.email                                                                     as d3_email,
+            t.site                                                                      as d3_site,
+            t.bankinfo                                                                  as d3_bankinfo,
+            t.member                                                                    as d3_member,
+            t.iik                                                                       as d3_iik,
+            t.bik                                                                       as d3_bik,
+            t.bin                                                                       as d3_bin,
+            t.kbe                                                                       as d3_kbe,
+            t2.rid                                                                      as d4_rid,
+            t2.changed                                                                  as d4_changed,
+            t2.user                                                                     as d4_user,
+            t2.enabled                                                                  as d4_enabled,
+            t2.bindrid                                                                  as d4_bindrid,
+            t2.commission                                                               as d4_commission,
+            t2.guarantee                                                                as d4_guarantee,
+            t2.guarantee_num                                                            as d4_guarantee_num,
+            ifNull(CasT(t2.guarantee_date as Nullable(Date)), toDate('1970-01-01'))     as d4_guarantee_date,
+            t2.chieffname                                                               as d4_chieffname,
+            t2.agreement                                                                as d4_agreement,
+            CasT(t2.created as Nullable(Date))                                          as d4_created,
+            t2.status                                                                   as d4_status,
+            t2.about                                                                    as d4_about,
+            t2.tourfirmname                                                             as d4_tourfirmname,
+            t2.filials                                                                  as d4_filials,
+            t2.licence                                                                  as d4_licence,
+            t2.founders                                                                 as d4_founders,
+            t2.insurance                                                                as d4_insurance,
+            t2.offices                                                                  as d4_offices,
+            t2.cellphone                                                                as d4_cellphone,
+            t2.bad_past_tour                                                            as d4_bad_past_tour,
+            t2.create_past_tour                                                         as d4_create_past_tour,
+            t2.no_create_tour                                                           as d4_no_create_tour,
+            t2.allow_auto_tour                                                          as d4_allow_auto_tour,
+            t2.list                                                                     as d4_list,
+            t2.is_agent                                                                 as d4_is_agent,
+            t2.remarks                                                                  as d4_remarks,
+            t2.auto_bad_tour                                                            as d4_auto_bad_tour,
+            ifNull(CasT(t2.hajj as Nullable(Date)), toDate('1970-01-01'))               as d4_hajj,
+            t2.description                                                              as d4_description
+    from {ch_db}.dict3_stage t
+    left join {ch_db}.dict4_stage t2 on t.rid = t2.bindrid
     """
 
     print("===== SQL START =====")
@@ -536,61 +539,60 @@ def build_dict3_flat_from_stage():
 
     ch.command(sql)
 
-    cnt = ch.query(f"SELECT count() FROM {ch_db}.dict3_flat").result_rows[0][0]
+    cnt = ch.query(f"select count() from {ch_db}.dict3_flat").result_rows[0][0]
     print(f"=== DONE BUILD dict3_flat | rows={cnt} ===")
 
 def build_dict90_flat_from_stage():
     ch_db, ch = _ch_client()
 
     print(f"=== BUILD `{ch_db}`.`dict90_flat` FROM STAGE VIEWS ===")
-    ch.command(f"TRUNCATE TABLE `{ch_db}`.`dict90_flat`")
+    ch.command(f"truncate table `{ch_db}`.`dict90_flat`")
 
     sql = f"""
-    INSERT INTO `{ch_db}`.`dict90_flat`
-    SELECT
-        d.rid             AS rid,
-        d.number          AS number,
-        d.country1_id     AS country1_id,
-        d.country2_id     AS country2_id,
-        d.country3_id     AS country3_id,
-        d.country4_id     AS country4_id,
-        d.country5_id     AS country5_id,
-        d.country6_id     AS country6_id,
-        d.currency        AS currency,
-        d.date_start      AS date_start,
-        d.date_end        AS date_end,
-        d.touragent_bin   AS touragent_bin,
-        d.airport_start   AS airport_start,
-        d.airport_end     AS airport_end,
-        d.flight_start    AS flight_start,
-        d.flight_end      AS flight_end,
-        d.airlines        AS airlines,
-        d.from_cabinet    AS from_cabinet,
-        d.passport        AS passport,
-        d.tid             AS tid,
-        d.qid             AS qid,
-        d.created         AS created,
-        d.changed         AS changed,
-        d.user            AS user,
-        d.enabled         AS enabled,
-        ifNull(d2.rid, 0) AS sub_rid,
-        d2.bindrid        AS sub_bindrid,
-        d2.sub_date_start AS sub_date_start,
-        d2.sub_date_end   AS sub_date_end,
-        d2.sub_airport    AS sub_airport,
-        d2.sub_airlines   AS sub_airlines,
-        d2.sub_flight     AS sub_flight,
-        d2.changed        AS sub_changed,
-        d2.user           AS sub_user,
-        d2.enabled        AS sub_enabled
-    FROM `{ch_db}`.`dict90_stage` d
-    LEFT JOIN `{ch_db}`.`dict91_stage` d2
-        ON d.rid = d2.bindrid
+    insert into `{ch_db}`.`dict90_flat`
+    select
+        d.rid             as rid,
+        d.number          as number,
+        d.country1_id     as country1_id,
+        d.country2_id     as country2_id,
+        d.country3_id     as country3_id,
+        d.country4_id     as country4_id,
+        d.country5_id     as country5_id,
+        d.country6_id     as country6_id,
+        d.currency        as currency,
+        d.date_start      as date_start,
+        d.date_end        as date_end,
+        d.touragent_bin   as touragent_bin,
+        d.airport_start   as airport_start,
+        d.airport_end     as airport_end,
+        d.flight_start    as flight_start,
+        d.flight_end      as flight_end,
+        d.airlines        as airlines,
+        d.from_cabinet    as from_cabinet,
+        d.passport        as passport,
+        d.tid             as tid,
+        d.qid             as qid,
+        d.created         as created,
+        d.changed         as changed,
+        d.user            as user,
+        d.enabled         as enabled,
+        ifNull(d2.rid, 0) as sub_rid,
+        d2.bindrid        as sub_bindrid,
+        d2.sub_date_start as sub_date_start,
+        d2.sub_date_end   as sub_date_end,
+        d2.sub_airport    as sub_airport,
+        d2.sub_airlines   as sub_airlines,
+        d2.sub_flight     as sub_flight,
+        d2.changed        as sub_changed,
+        d2.user           as sub_user,
+        d2.enabled        as sub_enabled
+    from `{ch_db}`.`dict90_stage` d
+    left join `{ch_db}`.`dict91_stage` d2 on d.rid = d2.bindrid
     """
 
     t0 = time.time()
     ch.command(sql)
-    cnt = ch.query(f"SELECT count() FROM `{ch_db}`.`dict90_flat`").result_rows[0][0]
+    cnt = ch.query(f"select count() from `{ch_db}`.`dict90_flat`").result_rows[0][0]
     print(f"=== DONE BUILD dict90_flat | rows={cnt} | {time.time()-t0:.2f}s ===")
 
 
@@ -599,8 +601,8 @@ def build_dict90_flat_from_stage():
 # =========================
 def _dashboard_inserts(ch_db: str):
     d5 = f"`{ch_db}`.`t_so_dashboard_5`"
-    d7 = f"`{ch_db}`.`t_so_dashboard_7`"
-    d9 = f"`{ch_db}`.`t_so_dashboard_9`"
+    d3 = f"`{ch_db}`.`t_so_dashboard_7`"
+    d2 = f"`{ch_db}`.`t_so_dashboard_9`"
     d11 = f"`{ch_db}`.`t_so_dashboard_11`"
     d12 = f"`{ch_db}`.`t_so_dashboard_12`"
     d19 = f"`{ch_db}`.`t_so_dashboard_19`"
@@ -651,79 +653,68 @@ def _dashboard_inserts(ch_db: str):
       AND toYear(t3.created) != 1970
     """
 
-    sql_7 = f"""
-    INSERT INTO {d7}
-    SELECT
-        t3.created                  AS created,
-        toYear(t3.created)          AS year,
-        toMonth(t3.created)         AS month,
-        t2.d32_qid                  AS qid,
-        t.d3_orgname                AS orgname,
-        t3.airport_start            AS airport,
-        t5.town                     AS city,
-        t7.country                  AS country
-    FROM {dict3_flat} t
-    JOIN {dict31_flat} t2
-        ON t.d4_rid = t2.d31_operatorid
-    LEFT JOIN {dict90_flat} t3
-        ON t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
-    LEFT JOIN {dict59_stage} t4
-        ON t4.iata = t3.airport_start
-    LEFT JOIN {dict15_stage} t5
-        ON t5.rid = t4.bindrid
-    LEFT JOIN {dict14_stage} t6
-        ON t6.rid = t5.bindrid
-    LEFT JOIN {dict13_stage} t7
-        ON t7.rid = t6.bindrid
-    WHERE t2.d32_enabled = 1
-      AND t2.d32_mode = 0
-      AND t2.d32_qid > 0
-      AND toYear(t3.created) != 1970
+    sql_3 = f"""
+    insert into {d3}
+    select
+            t3.created                  as created,
+            toYear(t3.created)          as year,
+            toMonth(t3.created)         as month,
+            t2.d32_qid                  as qid,
+            t.d3_orgname                as orgname,
+            t3.airport_start            as airport,
+            t5.town                     as city,
+            t7.country                  as country
+    from {dict3_flat} t
+    join {dict31_flat} t2       on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3  on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
+    left join {dict59_stage} t4 on t4.iata = t3.airport_start
+    left join {dict15_stage} t5 on t5.rid = t4.bindrid
+    left join {dict14_stage} t6 on t6.rid = t5.bindrid
+    left join {dict13_stage} t7 on t7.rid = t6.bindrid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
     """
 
-    sql_9 = f"""
-    INSERT INTO {d9}
-    SELECT
-        t3.created                  AS created,
-        toYear(t3.created)          AS year,
-        toMonth(t3.created)         AS month,
-        case
-            when toMonth(t3.created)=1 then 'Январь'
-            when toMonth(t3.created)=2 then 'Февраль'
-            when toMonth(t3.created)=3 then 'Март'
-            when toMonth(t3.created)=4 then 'Апрель'
-            when toMonth(t3.created)=5 then 'Май'
-            when toMonth(t3.created)=6 then 'Июнь'
-            when toMonth(t3.created)=7 then 'Июль'
-            when toMonth(t3.created)=8 then 'Август'
-            when toMonth(t3.created)=9 then 'Сентябрь'
-            when toMonth(t3.created)=10 then 'Октябрь'
-            when toMonth(t3.created)=11 then 'Ноябрь'
-            when toMonth(t3.created)=12 then 'Декабрь'
-            else null
-        end                         AS month_russian,
-        t2.d32_qid                  AS qid,
-        t.d3_orgname                AS orgname,
-        t3.airport_start            AS airport,
-        t7.country                  AS country,
-        t5.town                     AS city
-    FROM {dict3_flat} t
-    JOIN {dict31_flat} t2
-        ON t.d4_rid = t2.d31_operatorid
-    LEFT JOIN {dict90_flat} t3
-        ON t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
-    LEFT JOIN {dict59_stage} t4
-        ON t4.iata = t3.airport_start
-    LEFT JOIN {dict15_stage} t5
-        ON t5.rid = t4.bindrid
-    LEFT JOIN {dict14_stage} t6
-        ON t6.rid = t5.bindrid
-    LEFT JOIN {dict13_stage} t7
-        ON t7.rid = t6.bindrid
-    WHERE t2.d32_enabled = 1
-      AND t2.d32_mode = 0
-      AND t2.d32_qid > 0
-      AND toYear(t3.created) != 1970
+    sql_2 = f"""
+    insert into {d2}
+    select
+        t3.created                  as created,
+        toYear(t3.created)          as year,
+        toMonth(t3.created)         as month,
+        case when toMonth(t3.created)=1 then 'Январь'
+             when toMonth(t3.created)=2 then 'Февраль'
+             when toMonth(t3.created)=3 then 'Март'
+             when toMonth(t3.created)=4 then 'Апрель'
+             when toMonth(t3.created)=5 then 'Май'
+             when toMonth(t3.created)=6 then 'Июнь'
+             when toMonth(t3.created)=7 then 'Июль'
+             when toMonth(t3.created)=8 then 'Август'
+             when toMonth(t3.created)=9 then 'Сентябрь'
+             when toMonth(t3.created)=10 then 'Октябрь'
+             when toMonth(t3.created)=11 then 'Ноябрь'
+             when toMonth(t3.created)=12 then 'Декабрь'
+             else null
+        end                         as month_russian,
+        t2.d32_qid                  as qid,
+        t.d3_orgname                as orgname,
+        t3.airport_start            as airport,
+        t7.country                  as country,
+        t5.town                     as city
+    from {dict3_flat} t
+    join {dict31_flat} t2          on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3     on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
+    left join {dict59_stage} t4    on t4.iata = t3.airport_start
+    left join {dict15_stage} t5    on t5.rid = t4.bindrid
+    left join {dict14_stage} t6    on t6.rid = t5.bindrid
+    left join {dict13_stage} t7    on t7.rid = t6.bindrid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
     """
 
     sql_11 = f"""
