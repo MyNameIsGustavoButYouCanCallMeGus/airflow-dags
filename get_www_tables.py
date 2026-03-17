@@ -600,6 +600,7 @@ def build_dict90_flat_from_stage():
 # DASHBOARD REFRESH
 # =========================
 def _dashboard_inserts(ch_db: str):
+    d1 = f"`{ch_db}`, `t_so_dashboard_1`"
     d2  = f"`{ch_db}`.`t_so_dashboard_9`"
     d3  = f"`{ch_db}`.`t_so_dashboard_7`"
     d4  = f"`{ch_db}`.`t_so_dashboard_5`"
@@ -618,6 +619,141 @@ def _dashboard_inserts(ch_db: str):
     dict14_stage = f"`{ch_db}`.`dict14_stage`"
     dict15_stage = f"`{ch_db}`.`dict15_stage`"
     dict59_stage = f"`{ch_db}`.`dict59_stage`"
+
+    sql_1 = f"""
+    insert into {d1}
+    with base as (
+        select
+    	        t.qid 											as qid,
+    	        toDate(t.date_start) 							as date_start,
+    	        toDate(t.date_end) 								as date_end,
+    	        arrayJoin(
+    	            arrayFilter(x -> x != 0, [
+    	                toUInt32(ifNull(t.country1_id, 0)),
+    	                toUInt32(ifNull(t.country2_id, 0)),
+    	                toUInt32(ifNull(t.country3_id, 0)),
+    	                toUInt32(ifNull(t.country4_id, 0)),
+    	                toUInt32(ifNull(t.country5_id, 0)),
+    	                toUInt32(ifNull(t.country6_id, 0))
+    	            ])
+    	        ) 												as country_id
+        from {dict90_flat} t
+        where 1 = 1
+          and ifNull(t.enabled, 0) = 1
+          and t.qid is not null
+          and t.date_start is not null
+          and t.date_end is not null
+          and toDate(t.date_end) >= toDate(t.date_start)
+    )
+    select
+    	    today() 													as as_of_date,
+    	    formatDateTime(today(), '%d.%m.%Y') 						as as_of_date_ru,
+    	    b.country_id 												as country_id,
+    	    ifNull(c.country, '') 										as country_ru,
+    	    ifNull(c.countryen, '') 									as country_en,
+    	    ifNull(c.country_code, '') 									as country_code,
+    	    countDistinctIf(
+    	        b.qid,
+    	        b.date_start >= addMonths(toStartOfMonth(today()), -1)
+    	        and b.date_start < toStartOfMonth(today())
+    	    ) 															as departed_prev_month_cnt,
+    	    countDistinctIf(
+    	        b.qid,
+    	        b.date_start >= toStartOfMonth(today())
+    	        and b.date_start <= today()
+    	    ) 															as departed_curr_month_cnt,
+    	    countDistinctIf(
+    	        b.qid,
+    	        b.date_start <= today()
+    	        and b.date_end > today()
+    	    ) 															as today_there_cnt,
+    	    countDistinctIf(
+    	        b.qid,
+    	        b.date_end = today()
+    	    ) 															as return_today_cnt,
+    	    countDistinctIf(
+    	        b.qid,
+    	        b.date_end = addDays(today(), 1)
+    	    ) 															as return_tomorrow_cnt,
+    	    countDistinctIf(
+    	        b.qid,
+    	        b.date_end = addDays(today(), 2)
+    	    ) 															as return_after_tomorrow_cnt
+    from base b
+    left join {dict13_stage} c on c.rid = b.country_id
+       									and ifNull(c.enabled, 0) = 1
+    where 1 = 1
+      and ifNull(c.country_code, '') != ''
+    group by
+        b.country_id,
+        c.country,
+        c.countryen,
+        c.country_code
+    """
+
+    sql_2 = f"""
+    insert into {d2}
+    select
+        t3.created                  as created,
+        toYear(t3.created)          as year,
+        toMonth(t3.created)         as month,
+        case when toMonth(t3.created)=1 then 'Январь'
+             when toMonth(t3.created)=2 then 'Февраль'
+             when toMonth(t3.created)=3 then 'Март'
+             when toMonth(t3.created)=4 then 'Апрель'
+             when toMonth(t3.created)=5 then 'Май'
+             when toMonth(t3.created)=6 then 'Июнь'
+             when toMonth(t3.created)=7 then 'Июль'
+             when toMonth(t3.created)=8 then 'Август'
+             when toMonth(t3.created)=9 then 'Сентябрь'
+             when toMonth(t3.created)=10 then 'Октябрь'
+             when toMonth(t3.created)=11 then 'Ноябрь'
+             when toMonth(t3.created)=12 then 'Декабрь'
+             else null
+        end                         as month_russian,
+        t2.d32_qid                  as qid,
+        t.d3_orgname                as orgname,
+        t3.airport_start            as airport,
+        t7.country                  as country,
+        t5.town                     as city
+    from {dict3_flat} t
+    join {dict31_flat} t2          on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3     on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
+    left join {dict59_stage} t4    on t4.iata = t3.airport_start
+    left join {dict15_stage} t5    on t5.rid = t4.bindrid
+    left join {dict14_stage} t6    on t6.rid = t5.bindrid
+    left join {dict13_stage} t7    on t7.rid = t6.bindrid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
+    """
+
+    sql_3 = f"""
+    insert into {d3}
+    select
+            t3.created                  as created,
+            toYear(t3.created)          as year,
+            toMonth(t3.created)         as month,
+            t2.d32_qid                  as qid,
+            t.d3_orgname                as orgname,
+            t3.airport_start            as airport,
+            t5.town                     as city,
+            t7.country                  as country
+    from {dict3_flat} t
+    join {dict31_flat} t2       on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3  on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
+    left join {dict59_stage} t4 on t4.iata = t3.airport_start
+    left join {dict15_stage} t5 on t5.rid = t4.bindrid
+    left join {dict14_stage} t6 on t6.rid = t5.bindrid
+    left join {dict13_stage} t7 on t7.rid = t6.bindrid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
+    """
 
     sql_4 = f"""
     insert into {d4}
@@ -654,63 +790,34 @@ def _dashboard_inserts(ch_db: str):
       and toYear(t3.created) != 1970
     """
 
-    sql_3 = f"""
-    insert into {d3}
+    sql_6 = f"""
+    insert into {d6}
     select
-            t3.created                  as created,
-            toYear(t3.created)          as year,
-            toMonth(t3.created)         as month,
-            t2.d32_qid                  as qid,
-            t.d3_orgname                as orgname,
-            t3.airport_start            as airport,
-            t5.town                     as city,
-            t7.country                  as country
+            t3.created                           as created,
+            toYear(t3.created)                   as year,
+            toMonth(t3.created)                  as month,
+            case
+                when toMonth(t3.created)=1  then 'Январь'
+                when toMonth(t3.created)=2  then 'Февраль'
+                when toMonth(t3.created)=3  then 'Март'
+                when toMonth(t3.created)=4  then 'Апрель'
+                when toMonth(t3.created)=5  then 'Май'
+                when toMonth(t3.created)=6  then 'Июнь'
+                when toMonth(t3.created)=7  then 'Июль'
+                when toMonth(t3.created)=8  then 'Август'
+                when toMonth(t3.created)=9  then 'Сентябрь'
+                when toMonth(t3.created)=10 then 'Октябрь'
+                when toMonth(t3.created)=11 then 'Ноябрь'
+                when toMonth(t3.created)=12 then 'Декабрь'
+                else null
+            end                                  as month_russian,
+            t.d3_orgname                         as orgname,
+            t2.d32_qid                           as qid,
+            t4.country                           as country
     from {dict3_flat} t
-    join {dict31_flat} t2       on t.d4_rid = t2.d31_operatorid
-    left join {dict90_flat} t3  on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
-    left join {dict59_stage} t4 on t4.iata = t3.airport_start
-    left join {dict15_stage} t5 on t5.rid = t4.bindrid
-    left join {dict14_stage} t6 on t6.rid = t5.bindrid
-    left join {dict13_stage} t7 on t7.rid = t6.bindrid
-    where 1=1
-      and t2.d32_enabled = 1
-      and t2.d32_mode = 0
-      and t2.d32_qid > 0
-      and toYear(t3.created) != 1970
-    """
-
-    sql_2 = f"""
-    insert into {d2}
-    select
-        t3.created                  as created,
-        toYear(t3.created)          as year,
-        toMonth(t3.created)         as month,
-        case when toMonth(t3.created)=1 then 'Январь'
-             when toMonth(t3.created)=2 then 'Февраль'
-             when toMonth(t3.created)=3 then 'Март'
-             when toMonth(t3.created)=4 then 'Апрель'
-             when toMonth(t3.created)=5 then 'Май'
-             when toMonth(t3.created)=6 then 'Июнь'
-             when toMonth(t3.created)=7 then 'Июль'
-             when toMonth(t3.created)=8 then 'Август'
-             when toMonth(t3.created)=9 then 'Сентябрь'
-             when toMonth(t3.created)=10 then 'Октябрь'
-             when toMonth(t3.created)=11 then 'Ноябрь'
-             when toMonth(t3.created)=12 then 'Декабрь'
-             else null
-        end                         as month_russian,
-        t2.d32_qid                  as qid,
-        t.d3_orgname                as orgname,
-        t3.airport_start            as airport,
-        t7.country                  as country,
-        t5.town                     as city
-    from {dict3_flat} t
-    join {dict31_flat} t2          on t.d4_rid = t2.d31_operatorid
-    left join {dict90_flat} t3     on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
-    left join {dict59_stage} t4    on t4.iata = t3.airport_start
-    left join {dict15_stage} t5    on t5.rid = t4.bindrid
-    left join {dict14_stage} t6    on t6.rid = t5.bindrid
-    left join {dict13_stage} t7    on t7.rid = t6.bindrid
+    join {dict31_flat} t2 on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3 on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
+    left join {dict13_stage} t4 on t3.country1_id = t4.rid
     where 1=1
       and t2.d32_enabled = 1
       and t2.d32_mode = 0
@@ -780,9 +887,34 @@ def _dashboard_inserts(ch_db: str):
       and t2.d32_qid > 0
       and toYear(t3.created) != 1970
     """
-
-    sql_6 = f"""
-    insert into {d6}
+    
+    sql_12 = f"""
+    insert into {d12}
+    select
+            t3.created                  as created,
+            toYear(t3.created)          as year,
+            toMonth(t3.created)         as month,
+            t2.d32_qid                  as qid,
+            t.d3_orgname                as orgname,
+            t3.airport_start            as airport,
+            t5.town                     as city,
+            t7.country                  as country
+    from {dict3_flat} t
+    join {dict31_flat} t2       on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3  on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
+    left join {dict59_stage} t4 on t4.iata = t3.airport_start
+    left join {dict15_stage} t5 on t5.rid = t4.bindrid
+    left join {dict14_stage} t6 on t6.rid = t5.bindrid
+    left join {dict13_stage} t7 on t7.rid = t6.bindrid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
+    """
+    
+    sql_13 = f"""
+    insert into {d13}
     select
             t3.created                           as created,
             toYear(t3.created)                   as year,
@@ -816,15 +948,64 @@ def _dashboard_inserts(ch_db: str):
       and toYear(t3.created) != 1970
     """
 
+    sql_14 = f"""
+    insert into {d14}
+    select
+            t3.created                           as created,
+            toYear(t3.created)                   as year,
+            toMonth(t3.created)                  as month,
+            case
+                when toMonth(t3.created)=1  then 'Январь'
+                when toMonth(t3.created)=2  then 'Февраль'
+                when toMonth(t3.created)=3  then 'Март'
+                when toMonth(t3.created)=4  then 'Апрель'
+                when toMonth(t3.created)=5  then 'Май'
+                when toMonth(t3.created)=6  then 'Июнь'
+                when toMonth(t3.created)=7  then 'Июль'
+                when toMonth(t3.created)=8  then 'Август'
+                when toMonth(t3.created)=9  then 'Сентябрь'
+                when toMonth(t3.created)=10 then 'Октябрь'
+                when toMonth(t3.created)=11 then 'Ноябрь'
+                when toMonth(t3.created)=12 then 'Декабрь'
+                else null
+            end                                  as month_russian,
+            t.d3_orgname                         as orgname,
+            t2.d32_qid                           as qid,
+            t4.country                           as country
+    from {dict3_flat} t
+    join {dict31_flat} t2 on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3 on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
+    left join {dict13_stage} t4 on t3.country1_id = t4.rid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
+    """
+    
     return {
-        "t_so_dashboard_5": sql_5,
-        "t_so_dashboard_7": sql_7,
-        "t_so_dashboard_9": sql_9,
-        "t_so_dashboard_11": sql_11,
-        "t_so_dashboard_12": sql_12,
-        "t_so_dashboard_19": sql_19,
+        "t_so_dashboard_1",  sql_1,
+        "t_so_dashboard_9":  sql_2,
+        "t_so_dashboard_7":  sql_3,
+        "t_so_dashboard_5":  sql_4,
+        "t_so_dashboard_19": sql_6,
+        "t_so_dashboard_11": sql_10,
+        "t_so_dashboard_12": sql_11,
+        "t_so_dashboard_7":  sql_12,
+        "t_so_dashboard_19":  sql_13,
+        "t_so_dashboard_19":  sql_14
     }
 
+    d1 = f"`{ch_db}`, `t_so_dashboard_1`"
+    d2  = f"`{ch_db}`.`t_so_dashboard_9`"
+    d3  = f"`{ch_db}`.`t_so_dashboard_7`"
+    d4  = f"`{ch_db}`.`t_so_dashboard_5`"
+    d6  = f"`{ch_db}`.`t_so_dashboard_19`"
+    d10 = f"`{ch_db}`.`t_so_dashboard_11`"
+    d11 = f"`{ch_db}`.`t_so_dashboard_12`"
+    d12 = f"`{ch_db}`,`t_so_dashboard_7`"
+    d13 = f"`{ch_db}`,`t_so_dashboard_19`"
+    d14 = f"`{ch_db}`,`t_so_dashboard_19`"
 
 def refresh_one_dashboard(table: str):
     ch_db, ch = _ch_client()
