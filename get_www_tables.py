@@ -601,7 +601,7 @@ def build_dict90_flat_from_stage():
 # =========================
 def _dashboard_inserts(ch_db: str):
     d1  = f"`{ch_db}`, `t_so_dashboard_1`"
-    d2  = f"`{ch_db}`.`t_so_dashboard_9`"
+    d2  = f"`{ch_db}`.`t_so_dashboard_2`"
     d3  = f"`{ch_db}`.`t_so_dashboard_7`"
     d4  = f"`{ch_db}`.`t_so_dashboard_5`"
     d5  = f"`{ch_db}`,`t_so_dashboard_13`"
@@ -696,28 +696,28 @@ def _dashboard_inserts(ch_db: str):
     sql_2 = f"""
     insert into {d2}
     select
-        t3.created                  as created,
-        toYear(t3.created)          as year,
-        toMonth(t3.created)         as month,
-        case when toMonth(t3.created)=1 then 'Январь'
-             when toMonth(t3.created)=2 then 'Февраль'
-             when toMonth(t3.created)=3 then 'Март'
-             when toMonth(t3.created)=4 then 'Апрель'
-             when toMonth(t3.created)=5 then 'Май'
-             when toMonth(t3.created)=6 then 'Июнь'
-             when toMonth(t3.created)=7 then 'Июль'
-             when toMonth(t3.created)=8 then 'Август'
-             when toMonth(t3.created)=9 then 'Сентябрь'
-             when toMonth(t3.created)=10 then 'Октябрь'
-             when toMonth(t3.created)=11 then 'Ноябрь'
-             when toMonth(t3.created)=12 then 'Декабрь'
-             else null
-        end                         as month_russian,
-        t2.d32_qid                  as qid,
-        t.d3_orgname                as orgname,
-        t3.airport_start            as airport,
-        t7.country                  as country,
-        t5.town                     as city
+    	    t3.created    	    	    as created,
+    	    toYear(t3.created)			as year,
+    	    toMonth(t3.created)			as month,
+    	    case when toMonth(t3.created)=1 then 'Январь'
+    	    	 when toMonth(t3.created)=2 then 'Февраль'
+    	    	 when toMonth(t3.created)=3 then 'Март'
+    	    	 when toMonth(t3.created)=4 then 'Апрель'
+    	    	 when toMonth(t3.created)=5 then 'Май'
+    	    	 when toMonth(t3.created)=6 then 'Июнь'
+    	    	 when toMonth(t3.created)=7 then 'Июль'
+    	    	 when toMonth(t3.created)=8 then 'Август'
+    	    	 when toMonth(t3.created)=9 then 'Сентябрь'
+    	    	 when toMonth(t3.created)=10 then 'Октябрь'
+    	    	 when toMonth(t3.created)=11 then 'Ноябрь'
+    	    	 when toMonth(t3.created)=12 then 'Декабрь'
+    	    	 else null
+    	    end 						as month_russian,
+    	    t2.d32_qid 					as qid,
+    	    t.d3_orgname				as orgname,
+    		t3.airport_start			as airport,
+    		t7.country					as country,
+    		t5.town						as city
     from {dict3_flat} t
     join {dict31_flat} t2          on t.d4_rid = t2.d31_operatorid
     left join {dict90_flat} t3     on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
@@ -726,10 +726,10 @@ def _dashboard_inserts(ch_db: str):
     left join {dict14_stage} t6    on t6.rid = t5.bindrid
     left join {dict13_stage} t7    on t7.rid = t6.bindrid
     where 1=1
-      and t2.d32_enabled = 1
-      and t2.d32_mode = 0
-      and t2.d32_qid > 0
-      and toYear(t3.created) != 1970
+      and t2.d32_enabled=1
+      and t2.d32_mode=0
+      and t2.d32_qid>0
+      and toYear(t3.created)!=1970
     """
 
     sql_3 = f"""
@@ -1214,7 +1214,7 @@ def _dashboard_inserts(ch_db: str):
     
     return {
         "t_so_dashboard_1",  sql_1,
-        "t_so_dashboard_9":  sql_2,
+        "t_so_dashboard_2":  sql_2,
         "t_so_dashboard_7":  sql_3,
         "t_so_dashboard_5":  sql_4,
         "t_so_dashboard_13": sql_5,
