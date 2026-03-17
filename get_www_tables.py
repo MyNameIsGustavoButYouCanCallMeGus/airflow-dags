@@ -603,7 +603,7 @@ def _dashboard_inserts(ch_db: str):
     d1  = f"`{ch_db}`, `t_so_dashboard_1`"
     d2  = f"`{ch_db}`.`t_so_dashboard_2`"
     d3  = f"`{ch_db}`.`t_so_dashboard_3`"
-    d4  = f"`{ch_db}`.`t_so_dashboard_5`"
+    d4  = f"`{ch_db}`.`t_so_dashboard_4`"
     d5  = f"`{ch_db}`,`t_so_dashboard_13`"
     d6  = f"`{ch_db}`.`t_so_dashboard_19`"
     d9  = f"`{ch_db}`,`t_so_dashboard_3`"
@@ -761,27 +761,27 @@ def _dashboard_inserts(ch_db: str):
     sql_4 = f"""
     insert into {d4}
     select
-            t3.created                              as created,
-            t3.number                               as tourcode,
-            concat(
-                'https://report.fondkamkor.kz/Voucher/queries/',
-                toString(t3.number),
-                '/view'
-            )                                       as tourcode_url,
-            t.d3_orgname                            as orgname,
-            t3.qid                                  as qid,
-            t3.date_start                           as date_start,
-            t3.date_end                             as date_end,
-            t3.airlines                             as airlines,
-            t3.airport_start                        as airport_kz,
-            t3.airport_end                          as airport_dest,
-            t4.country                              as country,
-            t3.passport                             as passport,
-            t.d4_description                        as note,
-            t3.sub_date_start                       as sub_date_start,
-            t3.sub_date_end                         as sub_date_end,
-            t3.sub_airlines                         as sub_airlines,
-            t3.sub_airport                          as sub_airport
+    	    t3.created              as created,
+    	    t3.number               as tourcode,
+    	    concat(
+    	        'https://report.fondkamkor.kz/Voucher/queries/',
+    	        toString(t3.number),
+    	        '/view'
+    	    )                       as tourcode_url,
+    	    t.d3_orgname            as touragent,
+    	    t3.qid                  as qid,
+    	    t3.date_start           as date_start,
+    	    t3.date_end             as date_end,
+    	    t3.airlines             as airlines,
+    	    t3.airport_start        as airport_kz,
+    	    t3.airport_end          as airport_dest,
+    	    t4.country              as country,
+    	    t3.passport             as passport,
+    	    t.d4_description        as note,
+    	    t3.sub_date_start       as sub_date_start,
+    	    t3.sub_date_end         as sub_date_end,
+    	    t3.sub_airlines         as sub_airlines,
+    	    t3.sub_airport          as sub_airport
     from {dict3_flat} t
     join {dict31_flat} t2       on t.d4_rid = t2.d31_operatorid
     left join {dict90_flat} t3  on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
@@ -1217,7 +1217,7 @@ def _dashboard_inserts(ch_db: str):
         "t_so_dashboard_1",  sql_1,
         "t_so_dashboard_2":  sql_2,
         "t_so_dashboard_3":  sql_3,
-        "t_so_dashboard_5":  sql_4,
+        "t_so_dashboard_4":  sql_4,
         "t_so_dashboard_13": sql_5,
         "t_so_dashboard_19": sql_6,
         "t_so_dashboard_3":  sql_9,
