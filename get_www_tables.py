@@ -600,12 +600,13 @@ def build_dict90_flat_from_stage():
 # DASHBOARD REFRESH
 # =========================
 def _dashboard_inserts(ch_db: str):
-    d4 = f"`{ch_db}`.`t_so_dashboard_5`"
-    d3 = f"`{ch_db}`.`t_so_dashboard_7`"
-    d2 = f"`{ch_db}`.`t_so_dashboard_9`"
-    d11 = f"`{ch_db}`.`t_so_dashboard_11`"
-    d12 = f"`{ch_db}`.`t_so_dashboard_12`"
-    d6 = f"`{ch_db}`.`t_so_dashboard_19`"
+    d2  = f"`{ch_db}`.`t_so_dashboard_9`"
+    d3  = f"`{ch_db}`.`t_so_dashboard_7`"
+    d4  = f"`{ch_db}`.`t_so_dashboard_5`"
+    d6  = f"`{ch_db}`.`t_so_dashboard_19`"
+    d10 = f"`{ch_db}`.`t_so_dashboard_11`"
+    d11 = f"`{ch_db}`.`t_so_dashboard_12`"
+    d12 = f"`{ch_db}`,`t_so_dashboard_7`"
 
     dict3_flat = f"`{ch_db}`.`dict3_flat`"
     dict31_flat = f"`{ch_db}`.`dict31_flat`"
@@ -715,72 +716,67 @@ def _dashboard_inserts(ch_db: str):
       and toYear(t3.created) != 1970
     """
 
-    sql_11 = f"""
-    INSERT INTO {d11}
-    SELECT
-        t3.created                  AS created,
-        toYear(t3.created)          AS year,
-        toMonth(t3.created)         AS month,
-        case
-            when toMonth(t3.created)=1 then 'Январь'
-            when toMonth(t3.created)=2 then 'Февраль'
-            when toMonth(t3.created)=3 then 'Март'
-            when toMonth(t3.created)=4 then 'Апрель'
-            when toMonth(t3.created)=5 then 'Май'
-            when toMonth(t3.created)=6 then 'Июнь'
-            when toMonth(t3.created)=7 then 'Июль'
-            when toMonth(t3.created)=8 then 'Август'
-            when toMonth(t3.created)=9 then 'Сентябрь'
-            when toMonth(t3.created)=10 then 'Октябрь'
-            when toMonth(t3.created)=11 then 'Ноябрь'
-            when toMonth(t3.created)=12 then 'Декабрь'
-            else null
-        end                         AS month_russian,
-        t.d3_orgname                AS orgname,
-        t2.d32_qid                  AS qid
-    FROM {dict3_flat} t
-    JOIN {dict31_flat} t2
-        ON t.d4_rid = t2.d31_operatorid
-    LEFT JOIN {dict90_flat} t3
-        ON t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
-    WHERE t2.d32_enabled = 1
-      AND t2.d32_mode = 0
-      AND t2.d32_qid > 0
-      AND toYear(t3.created) != 1970
+    sql_10 = f"""
+    insert into {d10}
+    select
+            t3.created                  as created,
+            toYear(t3.created)          as year,
+            toMonth(t3.created)         as month,
+            case when toMonth(t3.created)=1 then 'Январь'
+                 when toMonth(t3.created)=2 then 'Февраль'
+                 when toMonth(t3.created)=3 then 'Март'
+                 when toMonth(t3.created)=4 then 'Апрель'
+                 when toMonth(t3.created)=5 then 'Май'
+                 when toMonth(t3.created)=6 then 'Июнь'
+                 when toMonth(t3.created)=7 then 'Июль'
+                 when toMonth(t3.created)=8 then 'Август'
+                 when toMonth(t3.created)=9 then 'Сентябрь'
+                 when toMonth(t3.created)=10 then 'Октябрь'
+                 when toMonth(t3.created)=11 then 'Ноябрь'
+                 when toMonth(t3.created)=12 then 'Декабрь'
+                 else null
+            end                         as month_russian,
+            t.d3_orgname                as orgname,
+            t2.d32_qid                  as qid
+    from {dict3_flat} t
+    join {dict31_flat} t2      on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3 on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
     """
 
-    sql_12 = f"""
-    INSERT INTO {d12}
-    SELECT
-        t3.created                           AS created,
-        toYear(t3.created)                   AS year,
-        t.d3_orgname                         AS orgname,
-        t.d4_allow_auto_tour                 AS allow_auto_tour,
-        case
-            when t.d4_allow_auto_tour = 1 then 'Да'
-            else 'Нет'
-        end                                  AS allow_auto_tour_russian,
-        t3.from_cabinet                      AS from_cabinet,
-        t.d4_list                            AS list,
-        case
-            when t.d4_list=0 then 'Туроператоры'
-            when t.d4_list=1 then 'Фрахтователи'
-            when t.d4_list=2 then 'Вышедшие туроператоры'
-            when t.d4_list=3 then 'Приостановившиеся деятельность'
-            when t.d4_list=4 then 'Скрытые'
-            else null
-        end                                  AS list_russian,
-        t3.passport                          AS passport,
-        t2.d32_qid                           AS qid
-    FROM {dict3_flat} t
-    JOIN {dict31_flat} t2
-        ON t.d4_rid = t2.d31_operatorid
-    LEFT JOIN {dict90_flat} t3
-        ON t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
-    WHERE t2.d32_enabled = 1
-      AND t2.d32_mode = 0
-      AND t2.d32_qid > 0
-      AND toYear(t3.created) != 1970
+    sql_11 = f"""
+    insert into {d11}
+    select
+            t3.created                           as created,
+            toYear(t3.created)                   as year,
+            t.d3_orgname                         as orgname,
+            t.d4_allow_auto_tour                 as allow_auto_tour,
+            case when t.d4_allow_auto_tour = 1 then 'Да'
+                 else 'Нет'
+            end                                  as allow_auto_tour_russian,
+            t3.from_cabinet                      as from_cabinet,
+            t.d4_list                            as list,
+            case when t.d4_list=0 then 'Туроператоры'
+                 when t.d4_list=1 then 'Фрахтователи'
+                 when t.d4_list=2 then 'Вышедшие туроператоры'
+                 when t.d4_list=3 then 'Приостановившиеся деятельность'
+                 when t.d4_list=4 then 'Скрытые'
+                 else null
+            end                                  as list_russian,
+            t3.passport                          as passport,
+            t2.d32_qid                           as qid
+    from {dict3_flat} t
+    join {dict31_flat} t2      on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3 on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
+    where 1=1
+      and t2.d32_enabled = 1
+      and t2.d32_mode = 0
+      and t2.d32_qid > 0
+      and toYear(t3.created) != 1970
     """
 
     sql_6 = f"""
