@@ -600,10 +600,11 @@ def build_dict90_flat_from_stage():
 # DASHBOARD REFRESH
 # =========================
 def _dashboard_inserts(ch_db: str):
-    d1 = f"`{ch_db}`, `t_so_dashboard_1`"
+    d1  = f"`{ch_db}`, `t_so_dashboard_1`"
     d2  = f"`{ch_db}`.`t_so_dashboard_9`"
     d3  = f"`{ch_db}`.`t_so_dashboard_7`"
     d4  = f"`{ch_db}`.`t_so_dashboard_5`"
+    d5  = f"`{ch_db}`,`t_so_dashboard_13`"
     d6  = f"`{ch_db}`.`t_so_dashboard_19`"
     d10 = f"`{ch_db}`.`t_so_dashboard_11`"
     d11 = f"`{ch_db}`.`t_so_dashboard_12`"
@@ -790,6 +791,103 @@ def _dashboard_inserts(ch_db: str):
       and toYear(t3.created) != 1970
     """
 
+    sql_5 = f"""
+    insert into {d5}
+    with op_flat as (
+        select
+    	        toUInt32(ifNull(t.d4_rid, 0)) 							    as operator_id,
+    	        argMax(ifNull(t.d4_tourfirmname, 'Нет данных'), d4_changed) as operator_name
+        from fondkamkor.dict3_flat t
+        where 1=1
+          and ifNull(t.d4_enabled, 0) = 1
+          and ifNull(t.d4_is_agent, 0) = 0
+          and t.d4_rid is not null
+        group by 1
+    ),
+    base as (
+        select
+    	        toUInt64(d90.qid) 				as tour_id,
+    	        toDate(d90.date_start) 			as date_start,
+    	        toDate(d90.date_end)   			as date_end,
+    	        nullIf(d90.airport_end, '')  	as airport_iata,
+    	        toUInt32(ifNull(d90.tid, 0)) 	as touroperator_id,
+    	        toUInt32(country_rid) 			as country_id
+        from fondkamkor.dict90_flat d90
+        array join arrayFilter(
+            x -> x != 0,
+            [
+                toUInt32(ifNull(d90.country1_id, 0)),
+                toUInt32(ifNull(d90.country2_id, 0)),
+                toUInt32(ifNull(d90.country3_id, 0)),
+                toUInt32(ifNull(d90.country4_id, 0)),
+                toUInt32(ifNull(d90.country5_id, 0)),
+                toUInt32(ifNull(d90.country6_id, 0))
+            ]
+        ) as country_rid
+        where 1=1
+          and ifNull(d90.enabled, 0) = 1
+          and d90.qid is not null
+          and d90.date_start is not null
+          and d90.date_end is not null
+          and toDate(d90.date_end) >= toDate(d90.date_start)
+    ),
+    expanded as (
+        select
+    	        tour_id					as tour_id,
+    	        country_id				as country_id,
+    	        airport_iata			as airport_iata,
+    	        touroperator_id			as touroperator_id,
+    	        addDays(date_start, n)  as as_of_date,
+    	        date_start				as date_start,
+    	        date_end				as date_end
+        from base
+        array join range(dateDiff('day', date_start, date_end) + 1) as n
+    )
+    select
+    	    e.as_of_date											as as_of_date,
+    	    formatDateTime(e.as_of_date, '%d.%m.%Y') 				as as_of_date_ru,
+    	    e.country_id											as country_id,
+    	    ifNull(c.country, '')      								as country_ru,
+    	    ifNull(c.countryen, '')    								as country_en,
+    	    ifNull(c.country_code, '') 								as country_code,
+    	    ifNull(e.airport_iata, '') 								as airport_iata,
+    	    ifNull(a.airport, 'Нет данных')    						as airport_ru,
+    	    ifNull(a.airport_en, 'Нет данных') 						as airport_en,
+    	    e.touroperator_id										as touroperator_id,
+    	    ifNull(op.operator_name, 'Нет данных') 					as touroperator_name,
+    	    countDistinctIf(e.tour_id, e.as_of_date = e.date_start) as arrived_cnt,
+    	    countDistinctIf(e.tour_id, e.as_of_date = e.date_end)   as departing_cnt,
+    	    countDistinct(e.tour_id) 								as in_country_cnt,
+    	    greatest(
+    	        toUInt64(0),
+    	        countDistinct(e.tour_id)
+    	        - countDistinctIf(e.tour_id, e.as_of_date = e.date_start)
+    	        - countDistinctIf(e.tour_id, e.as_of_date = e.date_end)
+    	    ) 														as staying_only_cnt,
+    	    countDistinct(e.tour_id) 								as total_on_date_cnt
+    from expanded e
+    left join fondkamkor.dict13_stage c on c.rid = e.country_id
+       									and ifNull(c.enabled, 0) = 1
+    left join fondkamkor.dict59_stage a on a.iata = e.airport_iata
+       									and ifNull(a.enabled, 0) = 1
+    left join op_flat op 				on op.operator_id = e.touroperator_id
+    where 1=1
+      and ifNull(c.country_code, '') != ''
+    group by
+        e.as_of_date,
+        e.country_id,
+        c.country,
+        c.countryen,
+        c.country_code,
+        e.airport_iata,
+        a.airport,
+        a.airport_en,
+        e.touroperator_id,
+        op.operator_name
+    """
+
+
+    
     sql_6 = f"""
     insert into {d6}
     select
@@ -988,6 +1086,7 @@ def _dashboard_inserts(ch_db: str):
         "t_so_dashboard_9":  sql_2,
         "t_so_dashboard_7":  sql_3,
         "t_so_dashboard_5":  sql_4,
+        "t_so_dashboard_13": sql_5,
         "t_so_dashboard_19": sql_6,
         "t_so_dashboard_11": sql_10,
         "t_so_dashboard_12": sql_11,
@@ -995,17 +1094,6 @@ def _dashboard_inserts(ch_db: str):
         "t_so_dashboard_19":  sql_13,
         "t_so_dashboard_19":  sql_14
     }
-
-    d1 = f"`{ch_db}`, `t_so_dashboard_1`"
-    d2  = f"`{ch_db}`.`t_so_dashboard_9`"
-    d3  = f"`{ch_db}`.`t_so_dashboard_7`"
-    d4  = f"`{ch_db}`.`t_so_dashboard_5`"
-    d6  = f"`{ch_db}`.`t_so_dashboard_19`"
-    d10 = f"`{ch_db}`.`t_so_dashboard_11`"
-    d11 = f"`{ch_db}`.`t_so_dashboard_12`"
-    d12 = f"`{ch_db}`,`t_so_dashboard_7`"
-    d13 = f"`{ch_db}`,`t_so_dashboard_19`"
-    d14 = f"`{ch_db}`,`t_so_dashboard_19`"
 
 def refresh_one_dashboard(table: str):
     ch_db, ch = _ch_client()
