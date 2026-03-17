@@ -604,7 +604,7 @@ def _dashboard_inserts(ch_db: str):
     d2  = f"`{ch_db}`.`t_so_dashboard_2`"
     d3  = f"`{ch_db}`.`t_so_dashboard_3`"
     d4  = f"`{ch_db}`.`t_so_dashboard_4`"
-    d5  = f"`{ch_db}`,`t_so_dashboard_13`"
+    d5  = f"`{ch_db}`,`t_so_dashboard_5`"
     d6  = f"`{ch_db}`.`t_so_dashboard_19`"
     d9  = f"`{ch_db}`,`t_so_dashboard_3`"
     d10 = f"`{ch_db}`.`t_so_dashboard_11`"
@@ -1218,7 +1218,7 @@ def _dashboard_inserts(ch_db: str):
         "t_so_dashboard_2":  sql_2,
         "t_so_dashboard_3":  sql_3,
         "t_so_dashboard_4":  sql_4,
-        "t_so_dashboard_13": sql_5,
+        "t_so_dashboard_5":  sql_5,
         "t_so_dashboard_19": sql_6,
         "t_so_dashboard_3":  sql_9,
         "t_so_dashboard_11": sql_10,
