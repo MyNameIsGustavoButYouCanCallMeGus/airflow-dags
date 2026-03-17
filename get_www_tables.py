@@ -484,7 +484,7 @@ def build_dict3_flat_from_stage():
             t.enabled                                                                   as d3_enabled,
             t.orgname                                                                   as d3_orgname,
             t.orgtype                                                                   as d3_orgtype,
-            ifNull(CasT(t.orgdate as Nullable(Date)), toDate('1970-01-01'))             as d3_orgdate,
+            ifNull(CAST(t.orgdate as Nullable(Date)), toDate('1970-01-01'))             as d3_orgdate,
             t.country                                                                   as d3_country,
             t.town                                                                      as d3_town,
             t.address                                                                   as d3_address,
@@ -506,10 +506,10 @@ def build_dict3_flat_from_stage():
             t2.commission                                                               as d4_commission,
             t2.guarantee                                                                as d4_guarantee,
             t2.guarantee_num                                                            as d4_guarantee_num,
-            ifNull(CasT(t2.guarantee_date as Nullable(Date)), toDate('1970-01-01'))     as d4_guarantee_date,
+            ifNull(CAST(t2.guarantee_date as Nullable(Date)), toDate('1970-01-01'))     as d4_guarantee_date,
             t2.chieffname                                                               as d4_chieffname,
             t2.agreement                                                                as d4_agreement,
-            CasT(t2.created as Nullable(Date))                                          as d4_created,
+            CAST(t2.created as Nullable(Date))                                          as d4_created,
             t2.status                                                                   as d4_status,
             t2.about                                                                    as d4_about,
             t2.tourfirmname                                                             as d4_tourfirmname,
@@ -527,7 +527,7 @@ def build_dict3_flat_from_stage():
             t2.is_agent                                                                 as d4_is_agent,
             t2.remarks                                                                  as d4_remarks,
             t2.auto_bad_tour                                                            as d4_auto_bad_tour,
-            ifNull(CasT(t2.hajj as Nullable(Date)), toDate('1970-01-01'))               as d4_hajj,
+            ifNull(CAST(t2.hajj as Nullable(Date)), toDate('1970-01-01'))               as d4_hajj,
             t2.description                                                              as d4_description
     from {ch_db}.dict3_stage t
     left join {ch_db}.dict4_stage t2 on t.rid = t2.bindrid
@@ -607,6 +607,8 @@ def _dashboard_inserts(ch_db: str):
     d10 = f"`{ch_db}`.`t_so_dashboard_11`"
     d11 = f"`{ch_db}`.`t_so_dashboard_12`"
     d12 = f"`{ch_db}`,`t_so_dashboard_7`"
+    d13 = f"`{ch_db}`,`t_so_dashboard_19`"
+    d14 = f"`{ch_db}`,`t_so_dashboard_19`"
 
     dict3_flat = f"`{ch_db}`.`dict3_flat`"
     dict31_flat = f"`{ch_db}`.`dict31_flat`"
