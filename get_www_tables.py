@@ -797,7 +797,7 @@ def _dashboard_inserts(ch_db: str):
         select
     	        toUInt32(ifNull(t.d4_rid, 0)) 							    as operator_id,
     	        argMax(ifNull(t.d4_tourfirmname, 'Нет данных'), d4_changed) as operator_name
-        from fondkamkor.dict3_flat t
+        from {dict3_flat} t
         where 1=1
           and ifNull(t.d4_enabled, 0) = 1
           and ifNull(t.d4_is_agent, 0) = 0
@@ -812,7 +812,7 @@ def _dashboard_inserts(ch_db: str):
     	        nullIf(d90.airport_end, '')  	as airport_iata,
     	        toUInt32(ifNull(d90.tid, 0)) 	as touroperator_id,
     	        toUInt32(country_rid) 			as country_id
-        from fondkamkor.dict90_flat d90
+        from {dict90_flat} d90
         array join arrayFilter(
             x -> x != 0,
             [
@@ -866,9 +866,9 @@ def _dashboard_inserts(ch_db: str):
     	    ) 														as staying_only_cnt,
     	    countDistinct(e.tour_id) 								as total_on_date_cnt
     from expanded e
-    left join fondkamkor.dict13_stage c on c.rid = e.country_id
+    left join {dict13_stage} c on c.rid = e.country_id
        									and ifNull(c.enabled, 0) = 1
-    left join fondkamkor.dict59_stage a on a.iata = e.airport_iata
+    left join {dict59_stage} a on a.iata = e.airport_iata
        									and ifNull(a.enabled, 0) = 1
     left join op_flat op 				on op.operator_id = e.touroperator_id
     where 1=1
