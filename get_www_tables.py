@@ -609,11 +609,11 @@ def _dashboard_inserts(ch_db: str):
     d7  = f"`{ch_db}`,`t_so_dashboard_7`"
     d8  = f"`{ch_db}`,`t_so_dashboard_8`"
     d9  = f"`{ch_db}`,`t_so_dashboard_9`"
-    d10 = f"`{ch_db}`.`t_so_dashboard_11`"
-    d11 = f"`{ch_db}`.`t_so_dashboard_12`"
-    d12 = f"`{ch_db}`,`t_so_dashboard_7`"
-    d13 = f"`{ch_db}`,`t_so_dashboard_19`"
-    d14 = f"`{ch_db}`,`t_so_dashboard_19`"
+    d10 = f"`{ch_db}`.`t_so_dashboard_10`"
+    d11 = f"`{ch_db}`.`t_so_dashboard_11`"
+    d12 = f"`{ch_db}`,`t_so_dashboard_12`"
+    d13 = f"`{ch_db}`,`t_so_dashboard_13`"
+    d14 = f"`{ch_db}`,`t_so_dashboard_14`"
 
     dict3_flat = f"`{ch_db}`.`dict3_flat`"
     dict31_flat = f"`{ch_db}`.`dict31_flat`"
@@ -1373,11 +1373,11 @@ def _dashboard_inserts(ch_db: str):
         "t_so_dashboard_7":  sql_7,
         "t_so_dashboard_8":, sql_8,
         "t_so_dashboard_9":  sql_9,
-        "t_so_dashboard_11": sql_10,
-        "t_so_dashboard_12": sql_11,
-        "t_so_dashboard_7":  sql_12,
-        "t_so_dashboard_19": sql_13,
-        "t_so_dashboard_19": sql_14
+        "t_so_dashboard_10": sql_10,
+        "t_so_dashboard_11": sql_11,
+        "t_so_dashboard_12":  sql_12,
+        "t_so_dashboard_13": sql_13,
+        "t_so_dashboard_14": sql_14
     }
 
 def refresh_one_dashboard(table: str):
@@ -1519,20 +1519,55 @@ with DAG(
     # DASHBOARDS
     # =========================
     with TaskGroup(group_id="refresh_dashboards") as g_dash:
+        d1 = PythonOperator(
+            task_id="refresh_dashboard_1",
+            python_callable=refresh_one_dashboard,
+            op_kwargs={"table": "t_so_dashboard_1"},
+        )
+        d2 = PythonOperator(
+            task_id="refresh_dashboard_2",
+            python_callable=refresh_one_dashboard,
+            op_kwargs={"table": "t_so_dashboard_2"},
+        )
+        d3 = PythonOperator(
+            task_id="refresh_dashboard_3",
+            python_callable=refresh_one_dashboard,
+            op_kwargs={"table": "t_so_dashboard_3"},
+        )
+        d4 = PythonOperator(
+            task_id="refresh_dashboard_4",
+            python_callable=refresh_one_dashboard,
+            op_kwargs={"table": "t_so_dashboard_4"},
+        )
         d5 = PythonOperator(
             task_id="refresh_dashboard_5",
             python_callable=refresh_one_dashboard,
             op_kwargs={"table": "t_so_dashboard_5"},
+        )
+        d6 = PythonOperator(
+            task_id="refresh_dashboard_6",
+            python_callable=refresh_one_dashboard,
+            op_kwargs={"table": "t_so_dashboard_6"},
         )
         d7 = PythonOperator(
             task_id="refresh_dashboard_7",
             python_callable=refresh_one_dashboard,
             op_kwargs={"table": "t_so_dashboard_7"},
         )
+        d8 = PythonOperator(
+            task_id="refresh_dashboard_8",
+            python_callable=refresh_one_dashboard,
+            op_kwargs={"table": "t_so_dashboard_8"},
+        )
         d9 = PythonOperator(
             task_id="refresh_dashboard_9",
             python_callable=refresh_one_dashboard,
             op_kwargs={"table": "t_so_dashboard_9"},
+        )
+        d10 = PythonOperator(
+            task_id="refresh_dashboard_10",
+            python_callable=refresh_one_dashboard,
+            op_kwargs={"table": "t_so_dashboard_10"},
         )
         d11 = PythonOperator(
             task_id="refresh_dashboard_11",
@@ -1544,13 +1579,18 @@ with DAG(
             python_callable=refresh_one_dashboard,
             op_kwargs={"table": "t_so_dashboard_12"},
         )
-        d19 = PythonOperator(
-            task_id="refresh_dashboard_19",
+        d13 = PythonOperator(
+            task_id="refresh_dashboard_13",
             python_callable=refresh_one_dashboard,
-            op_kwargs={"table": "t_so_dashboard_19"},
+            op_kwargs={"table": "t_so_dashboard_13"},
+        )
+        d14 = PythonOperator(
+            task_id="refresh_dashboard_14",
+            python_callable=refresh_one_dashboard,
+            op_kwargs={"table": "t_so_dashboard_14"},
         )
 
-        d5 >> d7 >> d9 >> d11 >> d12 >> d19
+        d1 >> d2 >> d3 >> d4 >> d5 >> d6 >> d7 >> d8 >> d9 >> d10 >> d11 >> d12 >> d13 >> d14
 
     start >> [g_basic, g_34, g_3132, g_9091]
     [g_basic, g_34, g_3132, g_9091] >> g_flats
