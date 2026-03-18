@@ -1364,14 +1364,14 @@ def _dashboard_inserts(ch_db: str):
     """
     
     return {
-        "t_so_dashboard_1",  sql_1,
+        "t_so_dashboard_1":  sql_1,
         "t_so_dashboard_2":  sql_2,
         "t_so_dashboard_3":  sql_3,
         "t_so_dashboard_4":  sql_4,
         "t_so_dashboard_5":  sql_5,
         "t_so_dashboard_6":  sql_6,
         "t_so_dashboard_7":  sql_7,
-        "t_so_dashboard_8":, sql_8,
+        "t_so_dashboard_8":  sql_8,
         "t_so_dashboard_9":  sql_9,
         "t_so_dashboard_10": sql_10,
         "t_so_dashboard_11": sql_11,
