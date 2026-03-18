@@ -600,20 +600,20 @@ def build_dict90_flat_from_stage():
 # DASHBOARD REFRESH
 # =========================
 def _dashboard_inserts(ch_db: str):
-    d1  = f"`{ch_db}`, `t_so_dashboard_1`"
+    d1  = f"`{ch_db}`. `t_so_dashboard_1`"
     d2  = f"`{ch_db}`.`t_so_dashboard_2`"
     d3  = f"`{ch_db}`.`t_so_dashboard_3`"
     d4  = f"`{ch_db}`.`t_so_dashboard_4`"
-    d5  = f"`{ch_db}`,`t_so_dashboard_5`"
+    d5  = f"`{ch_db}`.`t_so_dashboard_5`"
     d6  = f"`{ch_db}`.`t_so_dashboard_6`"
-    d7  = f"`{ch_db}`,`t_so_dashboard_7`"
-    d8  = f"`{ch_db}`,`t_so_dashboard_8`"
-    d9  = f"`{ch_db}`,`t_so_dashboard_9`"
+    d7  = f"`{ch_db}`.`t_so_dashboard_7`"
+    d8  = f"`{ch_db}`.`t_so_dashboard_8`"
+    d9  = f"`{ch_db}`.`t_so_dashboard_9`"
     d10 = f"`{ch_db}`.`t_so_dashboard_10`"
     d11 = f"`{ch_db}`.`t_so_dashboard_11`"
-    d12 = f"`{ch_db}`,`t_so_dashboard_12`"
-    d13 = f"`{ch_db}`,`t_so_dashboard_13`"
-    d14 = f"`{ch_db}`,`t_so_dashboard_14`"
+    d12 = f"`{ch_db}`.`t_so_dashboard_12`"
+    d13 = f"`{ch_db}`.`t_so_dashboard_13`"
+    d14 = f"`{ch_db}`.`t_so_dashboard_14`"
 
     dict3_flat = f"`{ch_db}`.`dict3_flat`"
     dict31_flat = f"`{ch_db}`.`dict31_flat`"
