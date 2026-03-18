@@ -606,6 +606,8 @@ def _dashboard_inserts(ch_db: str):
     d4  = f"`{ch_db}`.`t_so_dashboard_4`"
     d5  = f"`{ch_db}`,`t_so_dashboard_5`"
     d6  = f"`{ch_db}`.`t_so_dashboard_6`"
+    d7  = f"`{ch_db}`,`t_so_dashboard_7`"
+    d8  = f"`{ch_db}`,`t_so_dashboard_8`"
     d9  = f"`{ch_db}`,`t_so_dashboard_3`"
     d10 = f"`{ch_db}`.`t_so_dashboard_11`"
     d11 = f"`{ch_db}`.`t_so_dashboard_12`"
@@ -923,6 +925,177 @@ def _dashboard_inserts(ch_db: str):
       and toYear(t3.created) != 1970
     """
 
+    sql_7 = f"""
+    insert into {d7}
+    select
+    	    t3.created    	    	    as created,
+    	    toYear(t3.created)			as year,
+    	    toMonth(t3.created)			as month,
+    	    case when toMonth(t3.created)=1 then 'Январь'
+    	    	 when toMonth(t3.created)=2 then 'Февраль'
+    	    	 when toMonth(t3.created)=3 then 'Март'
+    	    	 when toMonth(t3.created)=4 then 'Апрель'
+    	    	 when toMonth(t3.created)=5 then 'Май'
+    	    	 when toMonth(t3.created)=6 then 'Июнь'
+    	    	 when toMonth(t3.created)=7 then 'Июль'
+    	    	 when toMonth(t3.created)=8 then 'Август'
+    	    	 when toMonth(t3.created)=9 then 'Сентябрь'
+    	    	 when toMonth(t3.created)=10 then 'Октябрь'
+    	    	 when toMonth(t3.created)=11 then 'Ноябрь'
+    	    	 when toMonth(t3.created)=12 then 'Декабрь'
+    	    	 else null
+    	    end 						as month_russian,
+    	    t2.d32_qid 					as qid,
+    	    t.d3_orgname				as orgname,
+    		t3.airport_start			as airport,
+    		t7.country					as country,
+    		t5.town						as city
+    from {dict3_flat} t
+    join {dict31_flat} t2          on t.d4_rid = t2.d31_operatorid
+    left join {dict90_flat} t3     on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
+    left join {dict59_stage} t4    on t4.iata = t3.airport_start
+    left join {dict15_stage} t5    on t5.rid = t4.bindrid
+    left join {dict14_stage} t6    on t6.rid = t5.bindrid
+    left join {dict13_stage} t7    on t7.rid = t6.bindrid
+    where 1=1
+      and t2.d32_enabled=1
+      and t2.d32_mode=0
+      and t2.d32_qid>0
+      and toYear(t3.created)!=1970
+    """"
+
+    sql_8 = f"""
+    insert into {d8}
+    with agents as (
+        select
+    	        toUInt32(t.d3_rid) 						as agent_rid,
+    	        nullIf(trim(toString(t.d3_bin)), '') 	as iin_bin,
+    	        argMax(nullIf(trim(t.d3_orgname), ''),
+    	            ifNull(t.d4_changed, t.d3_changed)
+    	        	) 									as company_name,
+    	        argMax(nullIf(trim(t.d3_town), ''),
+    	            ifNull(t.d4_changed, t.d3_changed)
+    	        	) 									as company_city,
+    	        argMax(nullIf(trim(t.d3_site), ''),
+    	            ifNull(t.d4_changed, t.d3_changed)
+    	        	) 									as site,
+    	        nullIf(argMax(
+    	                toUInt32(ifNull(t.d4_rid, 0)),
+    	                ifNull(t.d4_changed, t.d3_changed)
+    	            ),0) 						 		as agent_dict4_id,
+    	        cast(argMax(
+    	                ifNull(t.d4_status, null),
+    	                ifNull(t.d4_changed, t.d3_changed)
+    	            ),'Nullable(UInt8)') 				as login_cabinet_flag
+        from fondkamkor.dict3_flat t
+        where 1=1
+          and ifNull(t.d3_enabled, 0)=1
+          and (isNull(t.d4_is_agent) or t.d4_is_agent=1)
+          and nullIf(trim(toString(t.d3_bin)), '') is not null
+        group by
+            t.d3_rid,
+            t.d3_bin
+    ),
+    agent_city as (
+        select
+    	        toUInt32(t2.bindrid) 	as bindrid,
+    	        argMax(nullIf(trim(t2.town), ''),
+    	            changed
+    	        ) 						as city
+        from fondkamkor.dict15_stage t2
+        where 1=1
+          and t2.enabled = 1
+        group by t2.bindrid
+    ),
+    base as (
+        select
+    	        toUInt64(t.qid) 							as qid,
+    	        toUInt32(t.rid) 							as tour_rid,
+    	        toString(t.number) 							as tourcode_number,
+    	        toDateTime(t.created) 						as created_dt,
+    	        toDate(t.created) 							as created_date,
+    	        toStartOfMonth(toDate(t.created)) 			as month_start,
+    	        toUInt16(toYear(t.created)) 				as year,
+    	        toUInt8(toMonth(t.created)) 				as month_num,
+    	        multiIf(
+    	            toMonth(t.created) = 1,  'Январь',
+    	            toMonth(t.created) = 2,  'Февраль',
+    	            toMonth(t.created) = 3,  'Март',
+    	            toMonth(t.created) = 4,  'Апрель',
+    	            toMonth(t.created) = 5,  'Май',
+    	            toMonth(t.created) = 6,  'Июнь',
+    	            toMonth(t.created) = 7,  'Июль',
+    	            toMonth(t.created) = 8,  'Август',
+    	            toMonth(t.created) = 9,  'Сентябрь',
+    	            toMonth(t.created) = 10, 'Октябрь',
+    	            toMonth(t.created) = 11, 'Ноябрь',
+    	            'Декабрь'
+    	        ) as month_ru,
+    	        nullIf(trim(toString(t.touragent_bin)), '') as iin_bin,
+    	        a.company_name,
+    	        coalesce(
+    	            c.city,
+    	            a.company_city
+    	        ) 											as city,
+    	        toUInt8(ifNull(t.from_cabinet, 0)) 			as from_cabinet_flag,
+    	        if(toUInt8(ifNull(t.from_cabinet, 0))=1,
+    	            'Ручной ввод',
+    	            'Кабинет'
+    	        ) 											as from_cabinet_label,
+    	        a.agent_dict4_id,
+    	        if(isNull(a.agent_dict4_id),
+    	            cast(null, 'Nullable(String)'),
+    	            concat(
+    	                'https://report.fondkamkor.kz/Voucher/agent/',
+    	                toString(a.agent_dict4_id),
+    	                '/home'
+    	            )
+    	        ) 											as cabinet_url,
+    	        if(isNull(a.agent_dict4_id),
+    	            'Нет ссылки',
+    	            'Кабинет'
+    	        ) 											as cabinet_link_text,
+    	        a.login_cabinet_flag,
+    	        multiIf(
+    	            a.login_cabinet_flag = 1, 'Да',
+    	            a.login_cabinet_flag = 0, 'Нет',
+    	            'Нет данных'
+    	        ) 											as login_cabinet_label,
+    	        toUInt8(1) 									as issued_cnt,
+    	        toUInt8(rand() % 2) 						as confirmed
+        from fondkamkor.dict90_flat t
+        left join agents a 		on a.iin_bin = nullIf(trim(toString(t.touragent_bin)), '')
+        left join agent_city c 	on c.bindrid = a.agent_rid
+        where 1=1
+          and ifNull(t.enabled, 0) = 1
+    )
+    select
+    	    b.qid														as qid,
+    	    b.tour_rid													as tour_rid,
+    	    b.tourcode_number											as tourcode_number,
+    	    b.created_dt												as created_dt,
+    	    b.created_date												as created_date,
+    	    b.month_start												as month_start,
+    	    b.year														as year,
+    	    b.month_num													as month_num,
+    	    b.month_ru													as month_ru,
+    	    b.iin_bin													as iin_bin,
+    	    b.company_name												as company_name,
+    	    b.city														as city,
+    	    if(b.company_name is null, 'Нет данных', b.company_name) 	as company_name_label,
+    	    if(b.city is null, 'Нет данных', b.city) 					as city_label,
+    	    b.from_cabinet_flag											as from_cabinet_flag,
+    	    b.from_cabinet_label										as from_cabinet_label,
+    	    b.agent_dict4_id											as agent_dict4_id,
+    	    b.cabinet_url												as cabinet_url,
+    	    b.cabinet_link_text											as cabinet_link_text,
+    	    b.login_cabinet_flag										as login_cabinet_flag,
+    	    b.login_cabinet_label										as login_cabinet_label,
+    	    b.issued_cnt												as issued_cnt,
+    	    b.confirmed													as confirmed
+    from base b
+    """
+
     sql_9 = f"""
     insert into {d9}
     with agents as (
@@ -1217,7 +1390,9 @@ def _dashboard_inserts(ch_db: str):
         "t_so_dashboard_3":  sql_3,
         "t_so_dashboard_4":  sql_4,
         "t_so_dashboard_5":  sql_5,
-        "t_so_dashboard_6": sql_6,
+        "t_so_dashboard_6":  sql_6,
+        "t_so_dashboard_7":  sql_7,
+        
         "t_so_dashboard_3":  sql_9,
         "t_so_dashboard_11": sql_10,
         "t_so_dashboard_12": sql_11,
