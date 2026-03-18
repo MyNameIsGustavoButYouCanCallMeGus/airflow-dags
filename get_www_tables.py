@@ -941,7 +941,7 @@ def _dashboard_inserts(ch_db: str):
     from {dict_90_flat} t
     left join {dict3_flat} t2 on t.touragent_bin = t2.d3_bin
     order by t.qid desc
-    """"
+    """
 
     sql_8 = f"""
     insert into {d8}
