@@ -1270,27 +1270,58 @@ def _dashboard_inserts(ch_db: str):
     
     sql_12 = f"""
     insert into {d12}
+    with agents as (
+        select
+    	        toUInt32(d3_rid) 					as agent_rid,
+    	        nullIf(trim(toString(d3_bin)), '') 	as iin_bin,
+    	        argMax(
+    	            nullIf(trim(d3_orgname), ''),
+    	            ifNull(d4_changed, d3_changed)
+    	        ) 									as company_name,
+    	        argMax(
+    	            nullIf(trim(d3_town), ''),
+    	            ifNull(d4_changed, d3_changed)
+    	        ) 									as company_city
+        from fondkamkor.dict3_flat
+        where 1=1
+          and ifNull(d3_enabled, 0) = 1
+          and nullIf(trim(toString(d3_bin)), '') is not null
+        group by
+            d3_rid,
+            d3_bin
+    ),
+    agent_city as (
+        select
+    	        toUInt32(bindrid) 	as bindrid,
+    	        argMax(
+    	            nullIf(trim(town), ''),
+    	            changed
+    	        ) 					as city
+        from fondkamkor.dict15_stage
+        where 1=1
+          and enabled=1
+        group by bindrid
+    )
     select
-            t3.created                  as created,
-            toYear(t3.created)          as year,
-            toMonth(t3.created)         as month,
-            t2.d32_qid                  as qid,
-            t.d3_orgname                as orgname,
-            t3.airport_start            as airport,
-            t5.town                     as city,
-            t7.country                  as country
-    from {dict3_flat} t
-    join {dict31_flat} t2       on t.d4_rid = t2.d31_operatorid
-    left join {dict90_flat} t3  on t3.tid = t.d4_rid AND t3.qid = t2.d32_qid
-    left join {dict59_stage} t4 on t4.iata = t3.airport_start
-    left join {dict15_stage} t5 on t5.rid = t4.bindrid
-    left join {dict14_stage} t6 on t6.rid = t5.bindrid
-    left join {dict13_stage} t7 on t7.rid = t6.bindrid
+        case when t.touragent_bin = '' or t.touragent_bin is null then 'Неизвестный БИН'
+             else trim(t.touragent_bin)
+        end 							as bin,
+        case when a.company_name is null or a.company_name = '' then 'Неизвестные'
+             else trim(a.company_name)
+        end 							as orgname,
+        case when coalesce(c.city, a.company_city) is null
+                 or coalesce(c.city, a.company_city) = '' then 'Неизвестный город'
+             else trim(coalesce(c.city, a.company_city))
+        end 							as city,
+        t.qid 							as qid,
+        t.created 						as created,
+        toYear(t.created) 				as year,
+        toMonth(t.created) 				as month
+    from fondkamkor.dict90_flat t
+    left join agents a 		on a.iin_bin = nullIf(trim(toString(t.touragent_bin)), '')
+    left join agent_city c 	on c.bindrid = a.agent_rid
     where 1=1
-      and t2.d32_enabled = 1
-      and t2.d32_mode = 0
-      and t2.d32_qid > 0
-      and toYear(t3.created) != 1970
+      and ifNull(t.enabled, 0) = 1
     """
     
     sql_13 = f"""
