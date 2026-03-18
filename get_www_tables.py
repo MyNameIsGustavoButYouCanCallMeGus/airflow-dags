@@ -928,40 +928,19 @@ def _dashboard_inserts(ch_db: str):
     sql_7 = f"""
     insert into {d7}
     select
-    	    t3.created    	    	    as created,
-    	    toYear(t3.created)			as year,
-    	    toMonth(t3.created)			as month,
-    	    case when toMonth(t3.created)=1 then 'Январь'
-    	    	 when toMonth(t3.created)=2 then 'Февраль'
-    	    	 when toMonth(t3.created)=3 then 'Март'
-    	    	 when toMonth(t3.created)=4 then 'Апрель'
-    	    	 when toMonth(t3.created)=5 then 'Май'
-    	    	 when toMonth(t3.created)=6 then 'Июнь'
-    	    	 when toMonth(t3.created)=7 then 'Июль'
-    	    	 when toMonth(t3.created)=8 then 'Август'
-    	    	 when toMonth(t3.created)=9 then 'Сентябрь'
-    	    	 when toMonth(t3.created)=10 then 'Октябрь'
-    	    	 when toMonth(t3.created)=11 then 'Ноябрь'
-    	    	 when toMonth(t3.created)=12 then 'Декабрь'
-    	    	 else null
-    	    end 						as month_russian,
-    	    t2.d32_qid 					as qid,
-    	    t.d3_orgname				as orgname,
-    		t3.airport_start			as airport,
-    		t7.country					as country,
-    		t5.town						as city
-    from {dict3_flat} t
-    join {dict31_flat} t2          on t.d4_rid = t2.d31_operatorid
-    left join {dict90_flat} t3     on t3.tid = t.d4_rid and t3.qid = t2.d32_qid
-    left join {dict59_stage} t4    on t4.iata = t3.airport_start
-    left join {dict15_stage} t5    on t5.rid = t4.bindrid
-    left join {dict14_stage} t6    on t6.rid = t5.bindrid
-    left join {dict13_stage} t7    on t7.rid = t6.bindrid
-    where 1=1
-      and t2.d32_enabled=1
-      and t2.d32_mode=0
-      and t2.d32_qid>0
-      and toYear(t3.created)!=1970
+    	    case when t.touragent_bin = '' or t.touragent_bin is null then 'Неизвестный БИН'
+    	         else trim(t.touragent_bin)
+    	    end 				as bin,
+    	    case when t2.d4_tourfirmname is null or t2.d4_tourfirmname='' then 'Неизвестные'
+    	         else trim(t2.d4_tourfirmname) 
+    	    end 				as orgname,
+    	    t.qid 				as qid,
+    	    t.created 			as created,
+    	    toYear(t.created) 	as year,
+    	    toMonth(t.created) 	as month
+    from {dict_90_flat} t
+    left join {dict3_flat} t2 on t.touragent_bin = t2.d3_bin
+    order by t.qid desc
     """"
 
     sql_8 = f"""
