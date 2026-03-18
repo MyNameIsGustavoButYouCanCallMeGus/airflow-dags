@@ -1,5 +1,5 @@
 import os
-###final update13
+###final update15
 import time
 import re
 import calendar
@@ -1621,6 +1621,17 @@ with DAG(
             op_kwargs={"table": "t_so_dashboard_14"},
         )
 
-    start >> [g_basic, g_34, g_3132, g_9091] 
-    [g_basic, g_34, g_3132, g_9091] >> g_flats 
-    g_flats >> g_dash >> end >> trigger_self 
+        first_batch = [d1, d2, d3, d4, d5, d6, d7]
+        second_batch = [d8, d9, d10, d11, d12, d13, d14]
+
+        for i in range(len(first_batch) - 1):
+            first_batch[i] >> first_batch[i + 1]
+
+        for i in range(len(second_batch) - 1):
+            second_batch[i] >> second_batch[i + 1]
+
+        first_batch[-1] >> second_batch[0]
+
+    start >> [g_basic, g_34, g_3132, g_9091]
+    [g_basic, g_34, g_3132, g_9091] >> g_flats
+    g_flats >> g_dash >> end >> trigger_self
