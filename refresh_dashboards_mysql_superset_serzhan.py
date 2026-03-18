@@ -1,5 +1,5 @@
 import os
-###final update11
+###final update12
 import time
 import re
 import calendar
@@ -1624,7 +1624,11 @@ with DAG(
         first_batch = [d1, d2, d3, d4, d5, d6, d7]
         second_batch = [d8, d9, d10, d11, d12, d13, d14]
     
-        first_batch >> second_batch
+        first_batch = [d1, d2, d3, d4, d5, d6, d7]
+        second_batch = [d8, d9, d10, d11, d12, d13, d14]
+        
+        for t in first_batch:
+            t >> second_batch
 
     start >> [g_basic, g_34, g_3132, g_9091]
     [g_basic, g_34, g_3132, g_9091] >> g_flats
