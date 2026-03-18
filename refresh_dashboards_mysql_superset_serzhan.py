@@ -1461,7 +1461,7 @@ with DAG(
 
     trigger_self = TriggerDagRunOperator(
         task_id="trigger_self",
-        trigger_dag_id="mysql_clickhouse_increment_stage_flat_dashboards_self_trigger",
+        trigger_dag_id="refresh_dashboards_mysql_superset_serzhan",
     )
 
     # =========================
