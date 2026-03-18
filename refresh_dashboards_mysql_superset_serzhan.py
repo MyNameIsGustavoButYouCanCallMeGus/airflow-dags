@@ -938,7 +938,7 @@ def _dashboard_inserts(ch_db: str):
     	    t.created 			as created,
     	    toYear(t.created) 	as year,
     	    toMonth(t.created) 	as month
-    from {dict_90_flat} t
+    from {dict90_flat} t
     left join {dict3_flat} t2 on t.touragent_bin = t2.d3_bin
     order by t.qid desc
     """
