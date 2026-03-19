@@ -1,5 +1,5 @@
 import os
-###final update15
+###final update20
 import time
 import re
 import calendar
@@ -1418,21 +1418,43 @@ def refresh_one_dashboard(table: str):
     if table not in inserts:
         raise ValueError(f"Unknown dashboard table: {table}. Known: {list(inserts.keys())}")
 
-    fq = f"`{ch_db}`.`{table}`"
-    sql_insert = inserts[table]
+    live_table = f"`{ch_db}`.`{table}`"
+    tmp_table = f"`{ch_db}`.`{table}_tmp`"
 
-    print(f"=== REFRESH {fq} (TRUNCATE + INSERT) ===")
+    sql_insert_live = inserts[table]
+    sql_insert_tmp = sql_insert_live.replace(
+        f"insert into `{ch_db}`.`{table}`",
+        f"insert into {tmp_table}"
+    )
 
+    print(f"=== REFRESH {table} via tmp swap ===")
     t0 = time.time()
-    ch.command(f"TRUNCATE TABLE {fq}")
-    print(f"TRUNCATE OK in {time.time() - t0:.2f}s")
+
+    ch.command(f"TRUNCATE TABLE {tmp_table}")
+    print(f"TRUNCATE TMP OK in {time.time() - t0:.2f}s")
 
     t1 = time.time()
-    ch.command(sql_insert)
-    print(f"INSERT OK in {time.time() - t1:.2f}s")
+    ch.command(sql_insert_tmp)
+    print(f"INSERT TMP OK in {time.time() - t1:.2f}s")
 
-    cnt = ch.query(f"SELECT count() FROM {fq}").result_rows[0][0]
-    print(f"=== DONE {fq} | rows={cnt} | total={time.time() - t0:.2f}s ===")
+    tmp_cnt = ch.query(f"SELECT count() FROM {tmp_table}").result_rows[0][0]
+    print(f"{table}_tmp rows = {tmp_cnt}")
+
+    if tmp_cnt == 0:
+        raise ValueError(f"{table}_tmp is empty. Swap cancelled.")
+
+    live_old_cnt = ch.query(f"SELECT count() FROM {live_table}").result_rows[0][0]
+    if live_old_cnt > 0 and tmp_cnt < live_old_cnt * 0.5:
+        raise ValueError(
+            f"{table}_tmp row count too small: tmp={tmp_cnt}, live={live_old_cnt}. Swap cancelled."
+        )
+
+    t2 = time.time()
+    ch.command(f"EXCHANGE TABLES {live_table} AND {tmp_table}")
+    print(f"EXCHANGE OK in {time.time() - t2:.2f}s")
+
+    live_new_cnt = ch.query(f"SELECT count() FROM {live_table}").result_rows[0][0]
+    print(f"=== DONE {table} | rows={live_new_cnt} | total={time.time() - t0:.2f}s ===")
 
 
 # =========================
