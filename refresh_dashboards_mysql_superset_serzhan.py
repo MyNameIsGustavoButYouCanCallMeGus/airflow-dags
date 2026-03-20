@@ -628,6 +628,7 @@ def _dashboard_inserts(ch_db: str):
     insert into {d1}
     with base as (
         select
+        		d.d3_orgname									as orgname,
     	        t.qid 											as qid,
     	        toDate(t.date_start) 							as date_start,
     	        toDate(t.date_end) 								as date_end,
@@ -641,7 +642,8 @@ def _dashboard_inserts(ch_db: str):
     	                toUInt32(ifNull(t.country6_id, 0))
     	            ])
     	        ) 												as country_id
-        from {dict90_flat} t
+        from {dict3_flat} d
+        left join {dict90_flat} t on d.d4_rid=t.tid
         where 1 = 1
           and ifNull(t.enabled, 0) = 1
           and t.qid is not null
@@ -652,6 +654,7 @@ def _dashboard_inserts(ch_db: str):
     select
     	    today() 													as as_of_date,
     	    formatDateTime(today(), '%d.%m.%Y') 						as as_of_date_ru,
+    	    b.orgname													as orgname,
     	    b.country_id 												as country_id,
     	    ifNull(c.country, '') 										as country_ru,
     	    ifNull(c.countryen, '') 									as country_en,
@@ -686,9 +689,10 @@ def _dashboard_inserts(ch_db: str):
     from base b
     left join {dict13_stage} c on c.rid = b.country_id
        									and ifNull(c.enabled, 0) = 1
-    where 1 = 1
+    where 1=1
       and ifNull(c.country_code, '') != ''
     group by
+    	b.orgname,
         b.country_id,
         c.country,
         c.countryen,
