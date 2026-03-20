@@ -804,7 +804,7 @@ def _dashboard_inserts(ch_db: str):
     with op_flat as (
         select
     	        toUInt32(ifNull(t.d4_rid, 0)) 							    as operator_id,
-    	        argMax(ifNull(t.d4_tourfirmname, 'Нет данных'), d4_changed) as operator_name
+    	        argMax(ifNull(t.d3_orgname, 'Нет данных'), d4_changed) as operator_name
         from {dict3_flat} t
         where 1=1
           and ifNull(t.d4_enabled, 0) = 1
