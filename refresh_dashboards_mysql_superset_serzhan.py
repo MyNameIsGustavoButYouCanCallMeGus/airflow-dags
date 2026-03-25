@@ -1,5 +1,5 @@
 import os
-###final update20
+###final update21
 import time
 import re
 import calendar
@@ -14,6 +14,7 @@ from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.utils.task_group import TaskGroup
+from airflow.utils.trigger_rule import TriggerRule
 
 os.environ["TZ"] = "UTC"
 time.tzset()
@@ -1488,6 +1489,7 @@ with DAG(
     trigger_self = TriggerDagRunOperator(
         task_id="trigger_self",
         trigger_dag_id="refresh_dashboards_mysql_superset_serzhan",
+        trigger_rule=TriggerRule.ALL_DONE,
     )
 
     # =========================
